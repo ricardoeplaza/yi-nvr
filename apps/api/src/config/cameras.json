@@ -6,6 +6,7 @@
         "ftp_dir": "oficina",
         "mqtt_prefix": "yi-oficina",
         "rtsp_url": "rtsp://192.168.14.30/ch0_1.h264",
+        "rtsp": { "alt": "standard", "audio": "no" },
         "mqtt_topics": {
             "birth_will": "status",
             "motion": "motion_detection",
@@ -33,6 +34,7 @@
         "ftp_dir": "default",
         "mqtt_prefix": "",
         "rtsp_url": "",
+        "rtsp": { "alt": "standard", "audio": "no" },
         "capabilities": { "led": false, "ircut": false, "rec_mode": false, "power": false }
     }
 ]

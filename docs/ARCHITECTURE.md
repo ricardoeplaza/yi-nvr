@@ -228,26 +228,106 @@ defecto —, solo red interna).
   `go2rtc.exe -config infra/go2rtc/go2rtc.yaml` (el yaml lo genera el API en
   el arranque) y dejar `GO2RTC_URL=http://127.0.0.1:1984` en el `.env` local.
   go2rtc escucha por defecto en `127.0.0.1:1984`.
-- **Alternativa SBC**: el firmware `yi-hack-allwinner-v2` de las cámaras trae
-  go2rtc integrado (campo `"go2rtc":"yes"` en `/cgi-bin/status.json`).
-  **Sondeo real (solo lectura, cámara `oficina` 192.168.14.30, fw 0.3.6)**:
-  - `GET /cgi-bin/status.json` → 200, confirma `"go2rtc":"yes"`.
-  - `GET :1984/api/streams` y `GET :1984/` → **conexión rechazada** (el puerto
-    1984 de la cámara NO está escuchando).
-  - `GET /go2rtc/api/streams`, `GET /api/streams`, `GET /go2rtc/`,
-    `GET /whep`, `GET /ch0_1.m3u8`, `GET /index.html`, `GET /` → **404** en el
-    web server de la cámara (no hay UI ni rutas go2rtc servidas).
-  - `GET /cgi-bin/` → 403 (solo endpoints CGI concretos).
-  **Conclusión**: el go2rtc integrado **no expone endpoints accesibles de
-  forma trivial** (ni puerto 1984 abierto ni rutas HTTP); se **descarta como
-  alternativa** de live view sin sidecar a menos que se investigue cómo
-  habilitarlo en el firmware (fuera de scope de esta fase). La arquitectura
-  por defecto sigue siendo el **go2rtc central** del repo.
+- **Alternativa SBC** (corregido tras analizar el repo del firmware
+  `roleoroleo/yi-hack-Allwinner-v2`, ver D13): el campo
+  `"go2rtc":"yes"` de `/cgi-bin/status.json` **solo indica que el binario
+  `go2rtc` (v1.9.14, descargado en el build) está empaquetado** en
+  `/tmp/sd/yi-hack/bin/go2rtc`; NO que esté corriendo. El firmware lo usa
+  únicamente como **servidor RTSP** (opción `RTSP_ALT=go2rtc`): el yaml que
+  genera `script/service.sh` deja `api.listen:""` y `webrtc.listen:""`
+  (desactivados) y solo `rtsp.listen:":554"`. Por eso el puerto 1984 de la
+  cámara no escucha y las rutas `/go2rtc/*` dan 404: **por diseño**, no es un
+  fallo. El go2rtc de la cámara **no sirve como live view directo** (sin
+  WHEP/WebRTC); la arquitectura por defecto sigue siendo el **go2rtc central**
+  del repo consumiendo RTSP :554 de la cámara.
 
 ### D12 (fase 3) — Criterios [INTEG]/[SBC] del live view: DEFERRED
 - `[INTEG]` compose completo con solo puertos 3000/2121/1024-1050 publicados
   al host: **DEFERRED-TO-INTEGRATION** (verificar en la fase de integración
   contra el stack Docker real; `docker-compose.yml` ya lo define así).
-- `[INTEG]`/`[SBC]` reproducción WebRTC real en navegador (stream en vivo):
-  **DEFERRED-TO-INTEGRATION** / **DEFERRED-TO-SBC**. En dev se verifica el
-  proxy con un stub HTTP (`scripts/verify-stream-proxy.js`), no con cámara real.
+ - `[INTEG]`/`[SBC]` reproducción WebRTC real en navegador (stream en vivo):
+   **DEFERRED-TO-INTEGRATION** / **DEFERRED-TO-SBC**. En dev se verifica el
+   proxy con un stub HTTP (`scripts/verify-stream-proxy.js`), no con cámara real.
+
+### D13 (fase 3) — RTSP server program de la cámara (RTSP_ALT): estándar por defecto, configurable
+
+Análisis del firmware `yi-hack-allwinner-v2` (repo clonado, fw 0.3.6). La UI
+web expone "RTSP server program" (key `RTSP_ALT`, enum validado por
+`mqtt-config/validate.c`): 3 programas que **todos sirven la misma URL**
+`rtsp://<cam>:554/ch0_0.h264` (high) / `ch0_1.h264` (low) con el mismo H.264
+codificado (nadie transcodifica):
+
+| Opción | Daemon | Fuente | Audio | Peso |
+|---|---|---|---|---|
+| `standard` (default) | `rRTSPServer` (live555, C++) | lee `/dev/shm/fshare_frame_buffer` directo | aac/pcm/alaw/ulaw | medio, el más probado |
+| `alternative` | `h264grabber -f` (C) + `rtsp_server_yi` (C++ ligero) | h264grabber volca h264/aac a fifos `/tmp/h264_{low,high}_fifo` | solo aac | el más ligero |
+| `go2rtc` | `go2rtc` v1.9.14 (Go, estático ARM) + `h264grabber` como fuente `exec` | stdout de h264grabber | solo aac | el más pesado (runt. Go en 512MB) |
+
+- `h264grabber` (C, en el repo) solo saca el flujo **ya codificado** de la
+  shared memory; con `-f` escribe a fifos, sin `-f` a stdout (fuente exec de
+  go2rtc). Opciones: `-r low|high|both`, `-a` (audio AAC), `-s` (no tocar SPS
+  timing), `-m <model>`.
+- El watchdog (`script/wd.sh`) vigila cada variante (puerto LISTEN + procesos
+  vivos; `standard` además detecta proceso bloqueado al 0% CPU con socket
+  establecido y lo relanza).
+- **Recomendación**: mantener `standard` como default (es lo que trae el
+  firmware, soporta todos los codecs de audio y es lo más probado en el chip).
+  Si en el SBC se nota CPU ajustada, `alternative` es la opción ligera.
+  `go2rtc` en la cámara **no aporta** nada a nuestra arquitectura (ya hay un
+  go2rtc central) y es el más pesado.
+- **Código preparado para las 3 opciones**:
+  - `cameras.json`: campo `rtsp: { alt, audio }` por cámara (registro de qué
+    programa RTSP usa la cámara y su audio).
+  - `scripts/set-camera-rtsp.js`: consulta (`--get`) y cambia (`--alt ...
+    --audio ... --apply`) `RTSP_ALT`/`RTSP_AUDIO` vía los CGIs de la cámara
+    (`set_configs.sh?conf=system` + `service.sh?name=rtsp&action=stop|start`)
+    y re-sincroniza `cameras.json`. Sin `--apply` es dry-run.
+  - `generate-go2rtc-config.js`: emite `audio: true` en el stream si la
+    cámara declara audio (la cámara solo emite AAC).
+
+### D14 (fase 3) — Benchmark CPU de RTSP_ALT: justificación del programa RTSP elegido
+
+Justificación empírica de la decisión D13. Ante afirmaciones encontradas
+(sobre todo marketing a favor de `go2rtc`), se mide en la cámara real
+(`oficina`, 192.168.14.30, yi-hack-allwinner-v2 0.3.6, chip Allwinner) qué
+programa RTSP consume menos CPU/RAM bajo la misma carga.
+
+**Protocolo de prueba** (manual, desde la PC):
+
+- **Variables controladas**: 1 único consumidor RTSP fijo (ffmpeg en la PC,
+  sink `null`), siempre el stream low `ch0_1` (el que usa el NVR), audio OFF
+  en las 3 opciones, `RTSP_STREAM=low`. Las 3 pruebas se hacen **seguidas**
+  (misma luz/movimiento de fondo, porque el bitrate varía con la escena).
+- **Por cada opción** (`standard` → `alternative` → `go2rtc`):
+  1. Aplicar: `node scripts/set-camera-rtsp.js --camera oficina --alt <opcion> --audio no --apply`
+     (desde `apps/api`). Esperar 60 s de estabilización.
+  2. **Baseline sin consumidor**: 3 lecturas (~20 s entre ellas) de
+     `curl.exe http://192.168.14.30/cgi-bin/status.json` → `load_avg`, `free_memory`.
+  3. Arrancar consumidor (5 min):
+     `ffmpeg -rtsp_transport tcp -i rtsp://192.168.14.30/ch0_1.h264 -f null - 2> ffmpeg-<opcion>.log`
+  4. Mientras corre, 3–5 lecturas de `status.json` (`load_avg`, `free_memory`)
+     y, si hay SSH en la cámara (usuario `root`),
+     `top -b -n 2 -d 1 | grep -E "rRTSPServer|go2rtc|h264grabber|rtsp_server_yi"`
+     (la 2ª muestra de `top` es el %CPU real; misma técnica que el watchdog)
+     y `free`.
+  5. Parar ffmpeg y anotar del final del log: fps y `dropped frames`.
+  6. Anotar en la tabla y pasar a la siguiente opción.
+- **Al terminar**: restaurar la opción ganadora con `--apply`.
+- **Criterio de victoria**: menor **Δload** (load_avg con consumidor −
+  baseline) y 0 dropped frames. Si los Δload difieren <10 %, se mantiene
+  `standard` (mismo resultado, más probado). Un crash/restart del daemon
+  durante la prueba (hueco de fps) descarta la opción por estabilidad.
+
+**Resultados** (completar tras las pruebas):
+
+| Opción | load_avg sin client | load_avg con client | Δload | free_mem (KB) | CPU daemon % (SSH) | fps | drops | Estable? |
+|---|---|---|---|---|---|---|---|---|
+| standard | | | | | | | | |
+| alternative | | | | | | | | |
+| go2rtc | | | | | | | | |
+
+**Conclusión** (completar tras las pruebas):
+
+- Opción elegida como default para las cámaras del proyecto:
+- Razón (datos de la tabla):
+- Fecha de las pruebas:

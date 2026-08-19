@@ -8,6 +8,11 @@
  *   streams:
  *     oficina:
  *       src: rtsp://192.168.14.30/ch0_1.h264
+ *       audio: true
+ *
+ * `audio: true` solo se emite si la cámara declara audio en el stream
+ * (cameras.json → `rtsp.audio` distinto de no/none; la cámara emite AAC,
+ * único codec de audio soportado por h264grabber/go2rtc del firmware).
  *
  * Ruta de salida: env GO2RTC_CONFIG_PATH (absoluta, o relativa resuelta
  * desde la raíz del repo). Default: <raiz>/infra/go2rtc/go2rtc.yaml.
@@ -46,6 +51,19 @@ function resolveOutPath() {
 }
 
 /**
+ * Indica si la cámara declara audio en su stream RTSP.
+ * @param {Object} cam - Entrada de cameras.json
+ * @returns {boolean} - true si rtsp.audio es un valor de audio activo
+ */
+function camHasAudio(cam) {
+    const audio = cam.rtsp && cam.rtsp.audio;
+    return typeof audio === 'string'
+        && audio.trim() !== ''
+        && audio.toLowerCase() !== 'no'
+        && audio.toLowerCase() !== 'none';
+}
+
+/**
  * Construye el contenido YAML a partir de la lista de cámaras.
  * @param {Array<Object>} cameras - Contenido parseado de cameras.json
  * @returns {string} - YAML (terminado en salto de línea)
@@ -63,6 +81,9 @@ function buildYaml(cameras) {
     withRtsp.forEach(cam => {
         lines.push(`  ${cam.id}:`);
         lines.push(`    src: ${cam.rtsp_url}`);
+        if (camHasAudio(cam)) {
+            lines.push(`    audio: true`);
+        }
     });
     return lines.join('\n') + '\n';
 }
