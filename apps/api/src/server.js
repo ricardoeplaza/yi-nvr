@@ -3,9 +3,11 @@
  *
  * Punto de entrada principal de la aplicación.
  *
- * Este archivo arranca dos servicios:
+ * Este archivo arranca tres servicios:
  *  1. Servidor FTP (ftp.js) - Para recepción de videos desde las cámaras.
  *  2. Servidor Web Express - API REST + Frontend estático.
+ *  3. Cliente MQTT (mqtt/client.js) - Eventos y comandos de las cámaras
+ *     yi-hack. Degradación elegante: sin broker, HTTP/FTP siguen vivos.
  *
  * API Endpoints (routers en src/routes/):
  *  - GET /api/health          - Estado del servicio (DB + FTP)
@@ -14,6 +16,9 @@
  *  - DELETE /api/videos/:id   - Elimina un video y sus archivos
  *  - GET /api/cameras         - Lista de cámaras registradas con estadísticas
  *  - POST /api/cameras/:id/reload - Recarga cameras.json
+ *  - POST /api/cameras/:id/{power,led,night-vision,rec-mode} - Comandos MQTT
+ *  - POST /api/cameras/:id/command - Comando MQTT genérico (whitelist)
+ *  - POST /api/cameras/group/power - Comando MQTT a un grupo de cámaras
  *  - GET /api/timeline        - Datos agregados para el timeline
  *
  * El frontend se sirve desde /public como archivos estáticos.
@@ -37,6 +42,7 @@ try {
 const express = require('express');
 const { startFtpServer, isFtpListening } = require('./ftp');
 const { db } = require('./database');
+const mqttClient = require('./mqtt/client');
 
 const videosRouter = require('./routes/videos');
 const camerasRouter = require('./routes/cameras');
@@ -87,13 +93,16 @@ app.get('/api/health', (req, res) => {
     }
 
     const ftpStatus = isFtpListening() ? 'listening' : 'down';
+    const mqttStatus = mqttClient.isConnected() ? 'connected' : 'disconnected';
     const healthy = dbStatus === 'ok' && ftpStatus === 'listening';
 
     res.status(healthy ? 200 : 503).json({
         status: healthy ? 'ok' : 'error',
         uptime: process.uptime(),
         db: dbStatus,
-        ftp: ftpStatus
+        ftp: ftpStatus,
+        // Informativo: el broker MQTT caído NO degrada la salud del servicio
+        mqtt: mqttStatus
     });
 });
 
@@ -123,8 +132,16 @@ async function startServices() {
             console.log(`         GET /api/videos/:id`);
             console.log(`         GET /api/cameras`);
             console.log(`         POST /api/cameras/:id/reload`);
+            console.log(`         POST /api/cameras/:id/{power,led,night-vision,rec-mode}`);
+            console.log(`         POST /api/cameras/:id/command`);
+            console.log(`         POST /api/cameras/group/power`);
             console.log(`         GET /api/timeline`);
         });
+
+        // Cliente MQTT: NO bloquea el listen. Si el broker no está disponible
+        // (dev en Windows sin Mosquitto), el cliente se queda reintentando en
+        // background con backoff exponencial y HTTP/FTP siguen funcionando.
+        mqttClient.start(process.env.MQTT_BROKER_URL);
 
     } catch (err) {
         console.error('[Server] Error al iniciar servicios:', err.message);
@@ -133,15 +150,14 @@ async function startServices() {
 }
 
 // Manejamos el cierre graceful para liberar recursos
-process.on('SIGTERM', () => {
-    console.log('[Server] Recibido SIGTERM, cerrando servicios...');
+function shutdown(signal) {
+    console.log(`[Server] Recibido ${signal}, cerrando servicios...`);
+    mqttClient.stop();
     process.exit(0);
-});
+}
 
-process.on('SIGINT', () => {
-    console.log('[Server] Recibido SIGINT, cerrando servicios...');
-    process.exit(0);
-});
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Iniciamos la aplicación
 startServices();

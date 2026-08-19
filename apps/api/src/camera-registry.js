@@ -11,10 +11,15 @@
  *  - ftp_dir: subdirectorio bajo la raíz FTP al que sube la cámara. Las
  *    cámaras que suben a la raíz del FTP (sin subdirectorio) corresponden a
  *    'default' (ver extractCameraName en ftp.js).
- *  - mqtt_prefix: id yi-hack de la cámara (MAC sin dos puntos), para fases
- *    futuras de control vía MQTT.
+ *  - mqtt_prefix: prefix MQTT yi-hack de la cámara (por defecto de fábrica:
+ *    MAC sin dos puntos; personalizable, p. ej. "yi-oficina").
  *  - rtsp_url: URL RTSP para fases futuras (go2rtc / streaming).
  *  - capabilities: objeto de booleanos (led, ircut, rec_mode, power).
+ *  - mqtt_topics (opcional): overrides de los suffixes de tema MQTT por
+ *    cámara (birth_will, motion, motion_image, motion_files, sound_detection).
+ *  - mqtt_messages (opcional): overrides de los strings de payload que la
+ *    cámara publica (online, offline, motion_start, motion_stop, ai_human,
+ *    ai_vehicle, ai_animal, baby_crying, sound).
  *
  * La validación (validateCameras) es una función pura que Lanza un Error con
  * mensaje descriptivo ante cualquier problema, lo que permite probarla sin
@@ -43,6 +48,7 @@ function validateCameras(data) {
 
     const seenIds = new Set();
     const seenDirs = new Set();
+    const seenPrefixes = new Set();
 
     data.forEach((cam, i) => {
         if (typeof cam !== 'object' || cam === null || Array.isArray(cam)) {
@@ -72,6 +78,28 @@ function validateCameras(data) {
         for (const field of ['host', 'mqtt_prefix', 'rtsp_url']) {
             if (typeof cam[field] !== 'string') {
                 throw new Error(`cameras[${i}]: falta "${field}" (string, puede ser vacío)`);
+            }
+        }
+
+        // El prefix MQTT debe ser único y no vacío (se usa para resolver
+        // de tema → cámara en el cliente MQTT)
+        if (cam.mqtt_prefix !== '') {
+            if (seenPrefixes.has(cam.mqtt_prefix)) {
+                throw new Error(`cameras[${i}]: "mqtt_prefix" duplicado: "${cam.mqtt_prefix}"`);
+            }
+            seenPrefixes.add(cam.mqtt_prefix);
+        }
+
+        // Overrides opcionales del contrato MQTT (mapas de string → string)
+        for (const field of ['mqtt_topics', 'mqtt_messages']) {
+            if (cam[field] === undefined) continue;
+            if (typeof cam[field] !== 'object' || cam[field] === null || Array.isArray(cam[field])) {
+                throw new Error(`cameras[${i}]: "${field}" debe ser un objeto de string → string`);
+            }
+            for (const [key, value] of Object.entries(cam[field])) {
+                if (typeof value !== 'string') {
+                    throw new Error(`cameras[${i}]: "${field}.${key}" debe ser string`);
+                }
             }
         }
 
@@ -144,6 +172,15 @@ function getCameraByFtpDir(dir) {
 }
 
 /**
+ * Busca una cámara por su mqtt_prefix (el primer segmento de sus temas).
+ * @param {string} prefix
+ * @returns {Object|undefined}
+ */
+function getCameraByMqttPrefix(prefix) {
+    return cameras.find(cam => cam.mqtt_prefix === prefix);
+}
+
+/**
  * Recarga el archivo de configuración completo (todas las cámaras).
  * @returns {number} - Número de cámaras tras la recarga
  * @throws {Error} - El error de lectura/parseo/validación sube al caller
@@ -159,6 +196,7 @@ module.exports = {
     getAllCameras,
     getCameraById,
     getCameraByFtpDir,
+    getCameraByMqttPrefix,
     loadCameras,
     reload,
     validateCameras

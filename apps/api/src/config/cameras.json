@@ -2,10 +2,28 @@
     {
         "id": "oficina",
         "name": "Oficina",
-        "host": "192.168.1.50",
+        "host": "192.168.14.30",
         "ftp_dir": "oficina",
-        "mqtt_prefix": "A4CB8XXXXXXX",
-        "rtsp_url": "rtsp://192.168.1.50:554/ch0_0.h264",
+        "mqtt_prefix": "yi-oficina",
+        "rtsp_url": "rtsp://192.168.14.30/ch0_1.h264",
+        "mqtt_topics": {
+            "birth_will": "status",
+            "motion": "motion_detection",
+            "motion_image": "motion_detection_image",
+            "motion_files": "motion_files",
+            "sound_detection": "sound_detection"
+        },
+        "mqtt_messages": {
+            "online": "online",
+            "offline": "offline",
+            "motion_start": "motion_start",
+            "motion_stop": "motion_stop",
+            "ai_human": "human",
+            "ai_vehicle": "vehicle",
+            "ai_animal": "animal",
+            "baby_crying": "crying",
+            "sound": "sound"
+        },
         "capabilities": { "led": true, "ircut": true, "rec_mode": true, "power": false }
     },
     {

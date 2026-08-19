@@ -155,3 +155,49 @@ npm 12 bloquea por defecto los install scripts no autorizados; el binding nativo
 `apps/api/package.json` (se commitea a propósito: sin él, `npm ci` en otras máquinas
 con npm 12 repetiría el problema). `dtrace-provider` (dependencia opcional de
 `ftp-srv`, con fallback JS) se dejó bloqueado.
+
+### D7 (fase 2) — Contrato MQTT real de yi-hack (estilo Tasmota)
+Verificado en vivo sobre la cámara `oficina` (firmware
+`yi-hack-allwinner-v2 0.3.6`, broker `192.168.14.230:1883`, sin auth, QoS 1).
+El contrato NO es el de los ejemplos genéricos de yi-hack:
+
+- **Prefix**: `camera.mqtt_prefix`. Default de fábrica = MAC sin `:`, pero los
+  usuarios lo personalizan (la cámara `oficina` usa `yi-oficina`).
+- **Entrada** (la cámara publica): `<prefix>/<birth_will>` → `online` (retained)
+  / `offline` (last-will); `<prefix>/<motion>` → `motion_start` | `motion_stop`
+  | `human` | `vehicle` | `animal` | `crying`; `<prefix>/<motion_files>` → lista
+  de archivos al terminar un motion; `<prefix>/<sound_detection>` → `sound`.
+- **Salida** (el NVR publica, QoS 1): `<prefix>/cmnd/camera/<cmd>` con payloads
+  fijos: `on`/`off` (led, ir, rotate, motion_detection, save_video_on_motion,
+  sound_detection, baby_crying_detect, ai_*_detection, face_detection,
+  motion_tracking, local_record), `yes`/`no` (switch_on), `low|medium|high`
+  (sensitivity), `30..90` (sound_sensitivity), `no|presets|360` (cruise).
+  Payload **vacío** a `<prefix>/cmnd/camera` = ping de sync (la cámara
+  re-publica su estado; no cambia nada).
+- **Feedback**: `<prefix>/stat/camera/<cmd>` (mismo suffix que el comando).
+
+Los suffixes de tema y los strings de payload **varían entre firmwares y entre
+usuarios**, por lo que todo se resuelve por cámara con fallback a los defaults
+de fábrica (`mqtt/topics.js`). Referencia real (cámara `oficina`, en
+`cameras.json`):
+
+| Campo | Default fábrica | `oficina` |
+|---|---|---|
+| prefix | MAC sin `:` | `yi-oficina` |
+| birth_will | `birth_will` | `status` |
+| motion | `motion` | `motion_detection` |
+| motion_image | `motion_image` | `motion_detection_image` |
+| ai_human / ai_vehicle / ai_animal | `ai_human_detection` / `ai_vehicle_detection` / `ai_animal_detection` | `human` / `vehicle` / `animal` |
+| baby_crying | `baby_crying` | `crying` |
+| sound | `sound_detection` | `sound` |
+
+### D8 (fase 2) — `motion_image` no se suscribe
+El tema `<prefix>/<motion_image>` lleva JPEGs binarios pesados. El NVR no los
+necesita (los clips llegan por FTP), así que el cliente **no** se suscribe; el
+tema solo se resuelve/documenta en `topics.js` para futuras fases.
+
+### D9 (fase 2) — [INTEG] mosquitto en compose sin puerto host: DEFERRED-TO-INTEGRATION
+El criterio `[INTEG]` de "mosquitto en compose sin puerto publicado al host" se
+marcará en la fase de integración. `infra/mosquitto/mosquitto.conf` ya está
+preparado (listener 1883, `allow_anonymous true` — Mosquitto 2 lo deniega por
+defecto —, solo red interna).

@@ -62,6 +62,22 @@ function initSchema() {
     // Índices para búsquedas rápidas por cámara y fecha
     db.exec(`CREATE INDEX IF NOT EXISTS idx_videos_camera ON videos(camera_name)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_videos_timestamp ON videos(timestamp)`);
+
+    // Eventos MQTT (movimiento reportado por las cámaras vía yi-hack).
+    // camera_id: id de la cámara del registro (puede ser NULL si el prefix
+    // ya no existe en cameras.json). payload: texto recibido de la cámara.
+    const createMqttEvents = `
+        CREATE TABLE IF NOT EXISTS mqtt_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            camera_id TEXT,
+            event_type TEXT,
+            payload TEXT,
+            received_at TEXT
+        )
+    `;
+    db.exec(createMqttEvents);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_mqtt_events_camera ON mqtt_events(camera_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_mqtt_events_received ON mqtt_events(received_at)`);
 }
 
 /**
