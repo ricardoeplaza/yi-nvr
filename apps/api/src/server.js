@@ -20,6 +20,12 @@
  *  - POST /api/cameras/:id/command - Comando MQTT genérico (whitelist)
  *  - POST /api/cameras/group/power - Comando MQTT a un grupo de cámaras
  *  - GET /api/timeline        - Datos agregados para el timeline
+ *  - GET /api/cameras/:id/stream - URLs de streaming (WebRTC/HLS) vía go2rtc
+ *
+ * Proxy go2rtc (live view):
+ *  - /stream-proxy/* → GO2RTC_URL (env, default http://go2rtc:1984)
+ *    Si go2rtc no está corriendo (normal en dev), responde 502 JSON sin
+ *    tumbar el proceso. Montado tras las rutas API y los estáticos.
  *
  * El frontend se sirve desde /public como archivos estáticos.
  * Los videos procesados se sirven desde /storage/processed.
@@ -39,7 +45,18 @@ try {
     process.exit(1);
 }
 
+// Generamos la configuración de go2rtc (infra/go2rtc/go2rtc.yaml) a partir
+// de cameras.json, ANTES del listen. go2rtc es opcional en dev: si falla,
+// logueamos el error pero NO tumbar el servicio.
+try {
+    const { generateGo2rtcConfig } = require('../scripts/generate-go2rtc-config');
+    generateGo2rtcConfig();
+} catch (e) {
+    console.error('[go2rtc-config] No se pudo generar go2rtc.yaml (live view deshabilitado hasta arreglarlo):', e.message);
+}
+
 const express = require('express');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 const { startFtpServer, isFtpListening } = require('./ftp');
 const { db } = require('./database');
 const mqttClient = require('./mqtt/client');
@@ -47,10 +64,14 @@ const mqttClient = require('./mqtt/client');
 const videosRouter = require('./routes/videos');
 const camerasRouter = require('./routes/cameras');
 const timelineRouter = require('./routes/timeline');
+const streamRouter = require('./routes/stream');
 
 // Configuración
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
+
+// go2rtc (live view): URL del sidecar. Dev nativo: http://127.0.0.1:1984
+const GO2RTC_URL = process.env.GO2RTC_URL || 'http://go2rtc:1984';
 
 // Directorio de almacenamiento (override vía env para Docker; por defecto src/storage)
 const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.join(__dirname, 'storage');
@@ -113,6 +134,46 @@ app.get('/api/health', (req, res) => {
 app.use('/api', videosRouter);
 app.use('/api', camerasRouter);
 app.use('/api', timelineRouter);
+app.use('/api', streamRouter);
+
+// ============================================
+// PROXY go2rtc (live view)
+// ============================================
+
+// Proxy HTTP+WebSocket a go2rtc. Montado DESPUÉS de las rutas API y los
+// estáticos (más adelante el fallback del SPA irá después de este bloque).
+// Si go2rtc no está corriendo (caso normal en dev), las peticiones a
+// /stream-proxy/* responden 502 JSON y el proceso sigue vivo.
+const streamProxy = createProxyMiddleware({
+    target: GO2RTC_URL,
+    changeOrigin: true,
+    ws: true,
+    on: {
+        // Sustituye al error-response por defecto de http-proxy-middleware:
+        // logueamos y respondemos 502 JSON.
+        error: (err, req, res) => {
+            console.error(`[Proxy] go2rtc unreachable (${GO2RTC_URL}):`, err.message);
+            if (res && typeof res.writeHead === 'function' && !res.headersSent) {
+                res.writeHead(502, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'go2rtc unreachable' }));
+            }
+        }
+    }
+});
+
+app.use('/stream-proxy', streamProxy);
+
+// El proxy llama a next(err) al fallar: si ya respondimos 502 (on.error),
+// se traga el error; si no, responde 502 JSON. El resto, al handler default.
+app.use((err, req, res, next) => {
+    if (req.originalUrl.startsWith('/stream-proxy')) {
+        if (!res.headersSent) {
+            res.status(502).json({ success: false, error: 'go2rtc unreachable' });
+        }
+        return;
+    }
+    next(err);
+});
 
 // ============================================
 // INICIO DE SERVICIOS
@@ -136,6 +197,8 @@ async function startServices() {
             console.log(`         POST /api/cameras/:id/command`);
             console.log(`         POST /api/cameras/group/power`);
             console.log(`         GET /api/timeline`);
+            console.log(`         GET /api/cameras/:id/stream`);
+            console.log(`         /stream-proxy/* → ${GO2RTC_URL}`);
         });
 
         // Cliente MQTT: NO bloquea el listen. Si el broker no está disponible

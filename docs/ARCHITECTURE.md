@@ -201,3 +201,53 @@ El criterio `[INTEG]` de "mosquitto en compose sin puerto publicado al host" se
 marcará en la fase de integración. `infra/mosquitto/mosquitto.conf` ya está
 preparado (listener 1883, `allow_anonymous true` — Mosquitto 2 lo deniega por
 defecto —, solo red interna).
+
+### D10 (fase 3) — go2rtc: config generado + proxy en Express
+- `apps/api/scripts/generate-go2rtc-config.js` lee `src/config/cameras.json` y
+  escribe `infra/go2rtc/go2rtc.yaml` (una entrada `streams.<id>` por cámara con
+  `rtsp_url`; sin cámaras → `streams: {}` + warning). Se ejecuta en el arranque
+  de `server.js` ANTES del `listen`, envuelto en try/catch: si falla, log de
+  error pero el servicio sigue (go2rtc es opcional en dev). El yaml se
+  commitea como ejemplo (artefacto derivado).
+- El proxy `/stream-proxy/*` usa `http-proxy-middleware` (v4) con
+  `target: GO2RTC_URL` (env, default `http://go2rtc:1984`), `changeOrigin: true`
+  y `ws: true` (WebRTC = WebSocket). Se monta DESPUÉS de las rutas API y los
+  estáticos; el futuro fallback del SPA irá después.
+- **Robustez**: en v4, proveer `on: { error }` desactiva el error-response
+  por defecto (504 texto); respondemos `502 {success:false, error:"go2rtc
+  unreachable"}`. El middleware además llama a `next(err)`, así que hay un
+  error-handler de Express (tras el proxy) que traga el error si la respuesta
+  ya fue enviada. Con go2rtc caído, el proceso sigue vivo.
+- `GET /api/cameras/:id/stream` devuelve URLs relativas del proxy
+  (`/stream-proxy/api/ws?src=<id>`, `/stream-proxy/<id>.m3u8`): el navegador
+  solo habla con el puerto 3000.
+
+### D11 (fase 3) — go2rtc nativo en Windows (dev) + go2rtc integrado en yi-hack
+- **Dev nativo** (sin Docker): con `go2rtc.exe` descargado
+  (https://github.com/AlexxIT/go2rtc/releases), arrancar
+  `go2rtc.exe -config infra/go2rtc/go2rtc.yaml` (el yaml lo genera el API en
+  el arranque) y dejar `GO2RTC_URL=http://127.0.0.1:1984` en el `.env` local.
+  go2rtc escucha por defecto en `127.0.0.1:1984`.
+- **Alternativa SBC**: el firmware `yi-hack-allwinner-v2` de las cámaras trae
+  go2rtc integrado (campo `"go2rtc":"yes"` en `/cgi-bin/status.json`).
+  **Sondeo real (solo lectura, cámara `oficina` 192.168.14.30, fw 0.3.6)**:
+  - `GET /cgi-bin/status.json` → 200, confirma `"go2rtc":"yes"`.
+  - `GET :1984/api/streams` y `GET :1984/` → **conexión rechazada** (el puerto
+    1984 de la cámara NO está escuchando).
+  - `GET /go2rtc/api/streams`, `GET /api/streams`, `GET /go2rtc/`,
+    `GET /whep`, `GET /ch0_1.m3u8`, `GET /index.html`, `GET /` → **404** en el
+    web server de la cámara (no hay UI ni rutas go2rtc servidas).
+  - `GET /cgi-bin/` → 403 (solo endpoints CGI concretos).
+  **Conclusión**: el go2rtc integrado **no expone endpoints accesibles de
+  forma trivial** (ni puerto 1984 abierto ni rutas HTTP); se **descarta como
+  alternativa** de live view sin sidecar a menos que se investigue cómo
+  habilitarlo en el firmware (fuera de scope de esta fase). La arquitectura
+  por defecto sigue siendo el **go2rtc central** del repo.
+
+### D12 (fase 3) — Criterios [INTEG]/[SBC] del live view: DEFERRED
+- `[INTEG]` compose completo con solo puertos 3000/2121/1024-1050 publicados
+  al host: **DEFERRED-TO-INTEGRATION** (verificar en la fase de integración
+  contra el stack Docker real; `docker-compose.yml` ya lo define así).
+- `[INTEG]`/`[SBC]` reproducción WebRTC real en navegador (stream en vivo):
+  **DEFERRED-TO-INTEGRATION** / **DEFERRED-TO-SBC**. En dev se verifica el
+  proxy con un stub HTTP (`scripts/verify-stream-proxy.js`), no con cámara real.

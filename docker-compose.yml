@@ -1,0 +1,40 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3000:3000"
+      - "2121:2121"
+      - "1024-1050:1024-1050"
+    volumes:
+      - ./storage:/app/storage
+      - ./infra/go2rtc:/go2rtc-cfg
+    environment:
+      - STORAGE_DIR=/app/storage
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - GO2RTC_URL=http://go2rtc:1984
+      - GO2RTC_CONFIG_PATH=/go2rtc-cfg/go2rtc.yaml
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - API_AUTH_TOKEN=${API_AUTH_TOKEN}
+      - RETENTION_DAYS=${RETENTION_DAYS:-30}
+      - STORAGE_MAX_GB=${STORAGE_MAX_GB:-10}
+    depends_on: [mosquitto, go2rtc]
+    restart: unless-stopped
+  mosquitto:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    restart: unless-stopped
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    volumes:
+      - ./infra/go2rtc:/config
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        while [ ! -f /config/go2rtc.yaml ]; do sleep 0.5; done
+        exec go2rtc -config /config/go2rtc.yaml
+    restart: unless-stopped
