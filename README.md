@@ -1,81 +1,137 @@
-# Survillance Center
+# yi-nvr
 
-A lightweight local video surveillance bridge designed for ARM-based devices like Orange Pi. This system acts as a bridge that receives video files via FTP, processes them (generating thumbnails and previews), and provides a web-based interface to view and manage the recorded footage.
+> A 100% free, self-hosted NVR ecosystem that replaces the closed Xiaomi/Yi (MiHome) world for cameras running [yi-hack](https://github.com/roleoroleo/yi-hack-Allwinner-v2) firmware.
 
-## 🚀 Features
+**This project is being live-coded by an AI.** The entire codebase is written in real time by [Qwen 3.8 27B](https://qwen.ai), running **locally on a 16 GB VRAM machine** — no cloud APIs, no proprietary models. That is the point: this is a public, verifiable proof that serious software development is possible with local, open-weight models.
 
-- **FTP Receiver:** Automatically accepts video uploads from IP cameras via FTP.
-- **Video Processing:** Automatically generates `.jpg` thumbnails and `.webp` animated previews for each received video using `ffmpeg`.
-- **REST API:** A robust API for managing and retrieving video metadata and files.
-- **Web Interface:** A static frontend to browse videos, view details, and see a timeline of recordings.
-- **Efficient Storage:** Uses SQLite (with WAL mode) for fast and reliable metadata management.
-- **Timeline View:** Aggregated view of recordings grouped by date and camera.
+That said, this is *not* "prompt and pray". Behind every commit there is:
 
-## 🛠️ Tech Stack
+- a long, deliberate **human planning phase** captured in [`AGENT-PLAN.md`](AGENT-PLAN.md) — the single source of truth that defines the mission, the stack, the nine execution phases and their acceptance criteria, and
+- **constant human supervision, commit by commit**, reviewing, correcting and approving each step.
 
-- **Runtime:** [Node.js](https://nodejs.org/)
-- **Web Framework:** [Express](https://expressjs.com/)
-- **Database:** [better-sqlite3](https://github.com/better-sqlite3/better-sqlite3) (Optimized for performance on ARM)
-- **FTP Server:** [ftp-srv](https://github.com/mcollina/ftp-srv)
-- **Video Processing:** [fluent-ffmpeg](https://github.com/fluent-ffmpeg/node-fluent-ffmpeg)
-- **File Watching:** [chokidar](https://github.com/paul-maas/chokidar)
+## Why this project exists
 
-## 📂 Project Structure
+Two motivations, one codebase:
 
-```text
-survillance-center/
-├── src/
-│   ├── server.js          # Main entry point
-│   ├── ftp.js              # FTP server logic
-│   ├── database.js         # SQLite database management
-│   └── storage/            # Persistent data storage
-│       ├── surveillance.db # SQLite database file
-│       ├── ftp/            # Original .mp4 files
-│       └── processed/      # Thumbnails and previews
-├── public/                 # Static frontend files
-├── package.json            # Project dependencies and scripts
-└── README.md              # Project documentation
+1. **Freedom.** Xiaomi's recent policy changes turned the official ecosystem (MiHome app) into a subscription-gated experience: core surveillance features are no longer fully usable without paying. Combined with the deprecation of the original yi-hack, that pushed this project to build a complete, **libre alternative** that gives back full control of your own cameras — no accounts, no cloud lock-in, no subscription.
+2. **Proof.** Demonstrating that an autonomous AI agent, powered by a locally-run 27B model with 16 GB of VRAM, can take a working proof-of-concept all the way to a production-grade application under human supervision.
+
+The result is a single project that covers the whole job the Xiaomi ecosystem used to do:
+
+- **Camera management** — state, events, live stream and configuration for N cameras, all over MQTT.
+- **Recording** — a self-hosted "cloud recorder": cameras push motion-triggered clips over FTP; they are processed (thumbnails + animated previews), indexed in SQLite and served over a REST API and a PWA.
+- **Notifications** — Web Push alerts in real time, so you always know what is happening.
+
+## Features
+
+- **FTP clip receiver** — motion-triggered `.mp4` uploads from yi-hack cameras, mapped to cameras via a configurable registry.
+- **Video processing** — per-clip JPG thumbnail + animated WebP preview with `ffmpeg`.
+- **MQTT control plane** — motion events in; LED, night vision (IR-cut), record mode and power commands out.
+- **Live view** — WebRTC in the browser via a `go2rtc` sidecar (HLS fallback), proxied through the same process. No plugins.
+- **Web Push notifications** — on motion and on clip processing completion.
+- **Mobile-first PWA** — dashboard, camera controls, clip gallery, timeline, settings.
+- **Retention & bounded disk** — age-based and capacity-based cleanup policies.
+- **Single HTTP entry point** — API + PWA + media + stream proxy on one port. No nginx, no extra web server.
+- **Lightweight** — designed to run on small ARM SBCs (Orange Pi and friends), behind a Tailscale/Headscale VPN.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Node.js 20, Express 5 |
+| Database | SQLite via `better-sqlite3` |
+| FTP | `ftp-srv` + `chokidar` |
+| Video processing | `fluent-ffmpeg` + system `ffmpeg` |
+| MQTT broker | Eclipse Mosquitto 2 (Docker) |
+| RTSP → WebRTC | `go2rtc` sidecar, proxied in-process |
+| Push | `web-push` (VAPID) |
+| Frontend | Angular PWA |
+| Packaging | Docker Compose (systemd as plan B for low-RAM SBCs) |
+
+## Project structure
+
+```
+yi-nvr/
+├── AGENT-PLAN.md            # execution plan: phases, criteria, decisions
+├── .env.example
+├── infra/
+│   ├── mosquitto/           # broker config
+│   └── go2rtc/              # generated stream config
+├── apps/
+│   ├── api/                 # Node.js backend (FTP, MQTT, push, REST, PWA hosting)
+│   │   └── src/
+│   │       ├── server.js    # bootstrap only
+│   │       ├── ftp.js       # FTP receiver
+│   │       ├── processor.js # thumbnail/preview pipeline
+│   │       ├── database.js  # SQLite (WAL)
+│   │       ├── mqtt/        # client, topics, commands
+│   │       ├── push/        # Web Push fan-out
+│   │       └── routes/      # videos, cameras, timeline, push, stream
+│   └── frontend/            # Angular PWA
+├── storage/                 # Docker volume target (never committed)
+└── docs/
+    ├── ARCHITECTURE.md      # stack, environments, decision log
+    └── API.md               # full API reference
 ```
 
-## 🚀 Getting Started
+## Getting started
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (LTS recommended)
-- [FFmpeg](https://ffmpeg.org/) (Must be installed on the system)
+- [Node.js](https://nodejs.org/) (LTS, 20+)
+- [FFmpeg](https://ffmpeg.org/) on the system PATH
+- An MQTT broker (Mosquitto) for camera control
+- Cameras flashed with [yi-hack-Allwinner-v2](https://github.com/roleoroleo/yi-hack-Allwinner-v2)
 
-### Installation
-
-1. Clone this repository (or navigate to the folder).
-2. Install dependencies:
+### Development
 
 ```bash
+cp .env.example .env
+cd apps/api
 npm install
+npm start
 ```
 
-### Running the application
+The server listens on `http://localhost:3000` (HTTP API + static assets) and `2121` (FTP, passive range `1024–1050`).
 
-To start the server in development mode:
+### Docker (full stack)
 
 ```bash
-npm run dev
+cp .env.example .env   # fill in VAPID keys and API_AUTH_TOKEN
+docker compose up -d
 ```
 
-The server will start on `http://localhost:3000` by default.
+Only port `3000` (HTTP) and the FTP ports are exposed; Mosquitto and go2rtc stay on the internal network.
 
-## 📡 API Endpoints
+## API (summary)
 
-### Video Management
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/videos` | List clips (filters: `camera`, `startDate`, `endDate`, `limit`) |
+| `GET` | `/api/videos/:id` | Clip details |
+| `DELETE` | `/api/videos/:id` | Delete clip + files |
+| `GET` | `/api/cameras` | Registered cameras + DB facts |
+| `POST` | `/api/cameras/:id/reload` | Hot-reload camera registry |
+| `POST` | `/api/cameras/:id/led` | Toggle LED |
+| `POST` | `/api/cameras/:id/night-vision` | Toggle IR-cut |
+| `POST` | `/api/cameras/:id/rec-mode` | `continuous` \| `motion` \| `off` |
+| `POST` | `/api/cameras/:id/power` | Power on/off |
+| `GET` | `/api/cameras/:id/stream` | WebRTC/HLS stream endpoints |
+| `GET` | `/api/timeline` | Recordings grouped by date |
+| `GET` | `/api/health` | Liveness |
+| `POST` | `/api/push/subscribe` | Register a Web Push subscription |
 
-- `GET /api/videos`: List all videos. Supports filters: `camera`, `startDate`, `endDate`, and `limit`.
-- `GET /api/videos/:id`: Get detailed information for a specific video.
-- `DELETE /api/videos/:id`: Permanently delete a video and its associated files.
+See [`docs/API.md`](docs/API.md) for the full reference once phase 8 lands.
 
-### System Info
+## Status
 
-- `GET /api/cameras`: Get a list of all cameras that have sent videos.
-- `GET /api/timeline`: Get aggregated recording data for the timeline view.
+The project is evolving phase by phase following [`AGENT-PLAN.md`](AGENT-PLAN.md) (phase 0 → 9), each phase gated by verifiable acceptance criteria and tagged in git. The current tag tells you exactly how far it has come.
 
-## 📝 License
+## Thanks
 
-[ISC](https://opensource.org/licenses/ISC)
+- **[roleoro](https://github.com/roleoroleo)** — for [yi-hack-Allwinner-v2](https://github.com/roleoroleo/yi-hack-Allwinner-v2), the open firmware that exposes MQTT, RTSP and FTP on these cameras and makes this whole project possible. Without it, there is no escape from the closed ecosystem.
+- The open-source community behind `go2rtc`, `Mosquitto`, `better-sqlite3` and the rest of the stack.
+
+## License
+
+[ISC](https://opensource.org/licenses/ISC) — free to use, modify and redistribute.

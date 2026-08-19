@@ -1,7 +1,7 @@
 {
-  "name": "survillance-center",
+  "name": "yi-nvr",
   "version": "1.0.0",
-  "description": "Local video surveillance bridge for Orange Pi",
+  "description": "Self-hosted NVR ecosystem for yi-hack cameras — free alternative to the Xiaomi/Yi ecosystem",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -9,6 +9,8 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
+    "nvr",
+    "yi-hack",
     "surveillance",
     "ftp",
     "video",

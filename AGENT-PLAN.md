@@ -77,7 +77,7 @@ Existing API contract to preserve (byte-compatible JSON):
 ## 5. Target repository structure
 
 ```
-survillance-center/
+yi-nvr/
 ├── AGENT-PLAN.md                  # this file
 ├── docker-compose.yml
 ├── .env.example
@@ -282,7 +282,7 @@ Tasks:
 **Goal:** mobile-first PWA that fully replaces the vanilla frontend, the MiHome app, and the HA panel.
 
 Tasks:
-1. `ng new frontend` inside `apps/frontend` (standalone components, SSR **disabled**, zoneless if stable, else default). Add PWA support (`@angular/pwa` / `ng add @angular/pwa` per current Angular docs). App name "Surveillance Center", theme dark, `manifest.webmanifest` with icons (generate a simple set).
+1. `ng new frontend` inside `apps/frontend` (standalone components, SSR **disabled**, zoneless if stable, else default). Add PWA support (`@angular/pwa` / `ng add @angular/pwa` per current Angular docs). App name "yi-nvr", theme dark, `manifest.webmanifest` with icons (generate a simple set).
 2. **Service worker strategy (decided, do not re-litigate):** Angular's `ngsw-worker.js` stays at scope `/` for asset caching. Push is handled by a **separate** minimal service worker served at `/push-sw.js` with scope `/push/` (a tiny static dir or an Express route serving it). The PWA registers both. Do NOT try to merge push into ngsw.
 3. Angular services (`src/app/core/`):
    - `ApiService` (base URL `/api`, bearer token from `AuthService`, error normalization)
@@ -456,7 +456,7 @@ Tasks:
    - `linux/arm64` (e.g. Orange Pi Zero 3 or similar): full stack.
    - Compose: use `platform:` from an env var `TARGET_PLATFORM` (default `linux/arm64`); on the v7 profile set it to `linux/arm/v7`.
 2. **ARM image builds:** from the Debian amd64 box, `docker buildx build --platform linux/arm/v7 -f apps/api/Dockerfile . -t nvr-api:armv7 --load` (QEMU — slow but correct; `better-sqlite3` must compile for the target, which is why the toolchain is in the Dockerfile). Alternative documented path: build on-device. **Never** transfer `node_modules` between architectures.
-3. **systemd plan B** (for 512 MB boxes where the Docker daemon is too heavy): `deploy/systemd/surveillance-api.service` (+ optional `go2rtc.service`, mosquitto via package) running `node src/server.js` with the same env file. Document when to choose it.
+3. **systemd plan B** (for 512 MB boxes where the Docker daemon is too heavy): `deploy/systemd/yi-nvr-api.service` (+ optional `go2rtc.service`, mosquitto via package) running `node src/server.js` with the same env file. Document when to choose it.
 4. **Tailscale HTTPS:** `tailscale cert` → set `HTTPS_CERT_PATH`/`HTTPS_KEY_PATH`; verify push works end-to-end from the phone over the tailnet (Web Push requires a secure context).
 5. **Backup:** `scripts/backup.sh` — `sqlite3 storage/surveillance.db ".backup ..."` + copy `cameras.json`, `rsync`/`scp` to an external destination, cron entry. Test restore once.
 6. Final runbook in `README.md` section "Deployment": from bare SBC OS to running stack, < 30 min, no implicit steps.

@@ -1,4 +1,4 @@
-# Architecture — Surveillance Center (Home NVR)
+# Architecture — yi-nvr (Home NVR)
 
 Resumen del plan de ejecución (`AGENT-PLAN.md`, fuente de verdad). Este documento se
 actualiza con la "Decision log" a lo largo de las fases.
@@ -53,7 +53,7 @@ Consecuencias:
 ## Target repository structure
 
 ```
-survillance-center/
+yi-nvr/
 ├── AGENT-PLAN.md
 ├── docker-compose.yml
 ├── .env.example

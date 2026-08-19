@@ -1,7 +1,7 @@
 /**
  * app.js
  * 
- * Frontend vanilla JavaScript para Surveillance Center.
+ * Frontend vanilla JavaScript para yi-nvr.
  * 
  * Este script maneja:
  *  - Consumo de la API REST (/api/videos, /api/cameras, /api/timeline)

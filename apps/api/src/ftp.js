@@ -65,7 +65,7 @@ const ftpServer = new FtpSrv({
     pasv_min: FTP_PASV_MIN,
     pasv_max: FTP_PASV_MAX,
     anonymous: false,
-    greeting: ['Welcome to Surveillance Center FTP Server', 'Please authenticate to upload videos.']
+    greeting: ['Welcome to yi-nvr FTP Server', 'Please authenticate to upload videos.']
 });
 
 /**
