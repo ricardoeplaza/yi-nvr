@@ -1,0 +1,50 @@
+.dashboard {
+  padding: 16px 14px 20px;
+}
+
+.dash-header {
+  margin-bottom: 20px;
+
+  h1 {
+    font-size: 22px;
+    font-weight: 800;
+    margin: 0;
+    color: var(--text);
+  }
+
+  .dash-subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin: 4px 0 0;
+  }
+}
+
+.section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+
+.camera-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.video-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.loading {
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 14px;
+  padding: 20px;
+}

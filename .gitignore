@@ -17,7 +17,9 @@ storage/
 # Builds / generated
 dist/
 .angular/
-apps/api/public/
+
+# OpenCode Agent
+.opencode
 
 # Logs
 *.log

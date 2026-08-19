@@ -1,0 +1,7 @@
+{
+  "/api": { "target": "http://localhost:3000", "secure": false },
+  "/videos": { "target": "http://localhost:3000", "secure": false },
+  "/processed": { "target": "http://localhost:3000", "secure": false },
+  "/stream-proxy": { "target": "http://localhost:3000", "secure": false, "ws": true },
+  "/push": { "target": "http://localhost:3000", "secure": false }
+}

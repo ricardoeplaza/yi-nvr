@@ -1,0 +1,62 @@
+.camera-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: #f7f9fb;
+  }
+
+  &:active {
+    background: #eef2f7;
+  }
+}
+
+.camera-thumb {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, rgba(47, 111, 237, 0.2), rgba(139, 92, 246, 0.2));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .camera-icon {
+    font-size: 24px;
+  }
+}
+
+.camera-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.camera-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.camera-count {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.camera-last {
+  font-size: 12px;
+  color: var(--text-faint);
+}

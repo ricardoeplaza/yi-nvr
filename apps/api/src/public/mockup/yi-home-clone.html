@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>Cámara Salón · Yi Home</title>
+<style>
+  :root{
+    --bg:#eef1f4;
+    --card:#ffffff;
+    --text:#12161c;
+    --text-dim:#6b7480;
+    --text-faint:#9aa2ad;
+    --line:#e6e9ed;
+    --accent-blue:#2f6fed;
+    --track-bg:#eef2f7;
+    --track-rec:#bfe0ff;
+    --track-rec-strong:#8fbdf7;
+    --violet:#8b5cf6;
+    --green:#22c55e;
+    --blue-ev:#3b82f6;
+    --amber:#f59e0b;
+    --red:#ef4444;
+    --radius-lg:20px;
+    --radius-md:14px;
+    --radius-sm:10px;
+    --safe-t:env(safe-area-inset-top,0px);
+    --safe-b:env(safe-area-inset-bottom,0px);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+  button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent-blue);outline-offset:2px;}
+  ::-webkit-scrollbar{display:none;}
+  *{scrollbar-width:none;}
+
+  .app{
+    max-width:480px;
+    margin:0 auto;
+    background:var(--card);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    position:relative;
+    overflow:hidden;
+  }
+  @media (min-width:560px){
+    body{background:linear-gradient(180deg,#0e7c66,#0b5f66 45%,#eef1f4 45%);}
+    .app{
+      margin-top:32px;
+      margin-bottom:32px;
+      border-radius:28px;
+      box-shadow:0 30px 60px -20px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.04);
+      min-height:auto;
+    }
+  }
+
+  /* ---------- PLAYER ---------- */
+  .player{position:relative;background:#0b0b0d;}
+  .video-wrap{position:relative;width:100%;aspect-ratio:4/3.15;overflow:hidden;background:#0b0b0d;}
+  video{width:100%;height:100%;object-fit:cover;display:block;background:#000;}
+
+  .scrim-top{
+    position:absolute;top:0;left:0;right:0;
+    padding:calc(10px + var(--safe-t)) 10px 34px;
+    display:flex;align-items:flex-start;gap:8px;
+    background:linear-gradient(180deg,rgba(0,0,0,.62),rgba(0,0,0,.18) 70%,transparent);
+    color:#fff;
+  }
+  .icon-btn{
+    width:36px;height:36px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;flex:0 0 auto;
+    transition:background .15s ease;
+  }
+  .icon-btn:active{background:rgba(255,255,255,.18);}
+  .icon-btn svg{width:20px;height:20px;}
+  .cam-info{flex:1;min-width:0;text-align:center;padding-top:2px;}
+  .cam-info h1{margin:0;font-size:15px;font-weight:700;letter-spacing:.1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cam-info p{margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cam-info p .dot-rec{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--red);margin-right:5px;vertical-align:middle;animation:pulse 1.4s infinite;}
+
+  .scrim-bottom{
+    position:absolute;left:0;right:0;bottom:0;
+    padding:26px 12px calc(10px + var(--safe-b));
+    display:flex;align-items:flex-end;justify-content:space-between;
+    background:linear-gradient(0deg,rgba(0,0,0,.6),transparent);
+  }
+  .scrim-bottom .grp{display:flex;gap:6px;}
+  .icon-btn[disabled]{opacity:.35;pointer-events:none;}
+
+  .center-tap{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    pointer-events:none;
+  }
+  .center-tap svg{
+    width:46px;height:46px;color:#fff;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));
+    opacity:0;transition:opacity .25s ease, transform .25s ease;transform:scale(.85);
+  }
+  .center-tap.show svg{opacity:1;transform:scale(1);}
+
+  .buffering{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.25);
+  }
+  .spinner{width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+
+  .toast{
+    position:absolute;left:50%;bottom:14px;transform:translate(-50%,8px);
+    background:rgba(20,22,26,.92);color:#fff;font-size:12.5px;font-weight:500;
+    padding:8px 14px;border-radius:999px;white-space:nowrap;
+    opacity:0;pointer-events:none;transition:opacity .2s ease, transform .2s ease;
+    z-index:20;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0);}
+
+  /* ---------- DATE BAR ---------- */
+  .date-bar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:12px 14px 8px;
+  }
+  .date-pill{
+    position:relative;display:flex;align-items:center;gap:7px;
+    padding:7px 12px 7px 10px;border-radius:999px;background:var(--track-bg);
+    font-size:14px;font-weight:600;color:var(--text);
+  }
+  .date-pill svg{width:16px;height:16px;color:var(--text-dim);}
+  .date-pill .chev{width:11px;height:11px;color:var(--text-faint);margin-left:2px;}
+  .date-pill input[type="date"]{
+    position:absolute;inset:0;opacity:0;width:100%;height:100%;border:0;padding:0;cursor:pointer;
+  }
+  .live-btn{
+    display:flex;align-items:center;gap:6px;
+    padding:7px 14px;border-radius:999px;border:1px solid var(--line);
+    font-size:13px;font-weight:700;color:var(--text);
+    transition:background .15s ease,border-color .15s ease;
+  }
+  .live-btn .dot{width:7px;height:7px;border-radius:50%;background:var(--red);}
+  .live-btn.active{background:#fdeceb;border-color:#f8c7c3;color:var(--red);}
+  .live-btn.active .dot{animation:pulse 1.2s infinite;}
+
+  /* ---------- TIMELINE ---------- */
+  .timeline-section{padding:0 14px 6px;}
+  .timeline-wrap{
+    position:relative;height:74px;border-radius:var(--radius-md);
+    background:var(--track-bg);overflow:hidden;
+    touch-action:pan-x;
+  }
+  .timeline-scroll{
+    position:absolute;inset:0;overflow-x:auto;overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;cursor:grab;
+  }
+  .timeline-scroll.dragging{cursor:grabbing;}
+  .timeline-track{position:relative;height:100%;display:flex;}
+  .day-col{position:relative;height:100%;flex:0 0 auto;}
+  .night-zone{position:absolute;top:0;bottom:0;background:rgba(18,22,28,.045);}
+  .hour-tick{position:absolute;top:0;bottom:0;width:1px;background:var(--line);}
+  .hour-tick.major{background:#d8dce2;}
+  .hour-label{
+    position:absolute;top:5px;font-size:10px;color:var(--text-faint);
+    transform:translateX(-50%);white-space:nowrap;font-weight:600;
+  }
+  .rec-seg{
+    position:absolute;top:26px;height:22px;border-radius:6px;
+    background:linear-gradient(180deg,var(--track-rec),var(--track-rec-strong));
+  }
+  .now-line{position:absolute;top:14px;bottom:6px;width:2px;background:var(--red);border-radius:2px;}
+  .now-line::before{
+    content:"";position:absolute;top:-5px;left:50%;transform:translateX(-50%);
+    width:6px;height:6px;border-radius:50%;background:var(--red);
+  }
+  .ev-mark{
+    position:absolute;top:16px;bottom:16px;width:3px;border-radius:3px;
+    cursor:pointer;transform:translateX(-50%);
+  }
+  .ev-mark::after{
+    content:"";position:absolute;left:50%;top:-5px;transform:translate(-50%,-100%);
+    width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;
+    border-top:5px solid currentColor;opacity:0;transition:opacity .15s ease;
+  }
+  .ev-mark.selected::after{opacity:1;}
+
+  .playhead{
+    position:absolute;left:50%;top:0;bottom:0;width:0;transform:translateX(-.5px);
+    pointer-events:none;z-index:5;
+  }
+  .playhead::before,.playhead::after{
+    content:"";position:absolute;left:50%;transform:translateX(-50%);
+    width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;
+  }
+  .playhead::before{top:0;border-top:6px solid var(--text);}
+  .playhead::after{bottom:0;border-bottom:6px solid var(--text);}
+  .playhead .line{position:absolute;top:6px;bottom:6px;left:0;width:1.5px;background:var(--text);opacity:.55;}
+
+  .time-readout{
+    text-align:center;font-size:12px;font-weight:700;color:var(--text-dim);
+    padding:7px 0 2px;letter-spacing:.3px;
+  }
+  .time-readout .day-label{font-weight:600;color:var(--text-faint);margin-left:5px;}
+
+  /* ---------- EVENTS LIST ---------- */
+  .events{flex:1;overflow-y:auto;padding:4px 6px 10px;}
+  .ev-row{
+    display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:var(--radius-sm);
+    cursor:pointer;transition:background .15s ease;
+  }
+  .ev-row:active,.ev-row.active{background:#f4f6f9;}
+  .ev-thumb{
+    position:relative;flex:0 0 auto;width:58px;height:44px;border-radius:8px;overflow:hidden;
+    border-left:3px solid var(--ev-color,#999);background:#dfe4ea;
+  }
+  .ev-thumb .art{
+    position:absolute;inset:0;
+    background:
+      radial-gradient(circle at 25% 30%, rgba(255,255,255,.35), transparent 55%),
+      linear-gradient(135deg,#c9cfd8,#8f97a3);
+  }
+  .ev-thumb .play-ico,.ev-thumb .pause-ico{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:#fff;opacity:0;transition:opacity .15s ease;
+  }
+  .ev-row.active .ev-thumb .pause-ico{opacity:1;}
+  .ev-row:hover .ev-thumb .play-ico{opacity:.9;}
+  .ev-thumb svg{width:16px;height:16px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));}
+  .ev-mid{flex:1;min-width:0;}
+  .ev-title{font-size:14.5px;font-weight:700;margin:0 0 2px;}
+  .ev-sub{font-size:12px;color:var(--text-faint);margin:0;}
+  .ev-time{font-size:12.5px;color:var(--text-dim);font-weight:600;flex:0 0 auto;margin-right:8px;}
+  .ev-badge{
+    width:32px;height:32px;border-radius:50%;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    border:1.5px solid var(--line);color:var(--ev-color,#666);
+  }
+  .ev-badge.filled{background:var(--ev-color,#666);color:#fff;border-color:transparent;}
+  .ev-badge svg{width:16px;height:16px;}
+
+  .empty-day{
+    text-align:center;color:var(--text-faint);font-size:13px;padding:34px 20px;
+  }
+
+  /* ---------- TAB BAR ---------- */
+  .tabbar{
+    display:flex;border-top:1px solid var(--line);
+    padding-bottom:var(--safe-b);background:var(--card);
+  }
+  .tab{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:9px 0 8px;color:var(--text-faint);
+  }
+  .tab svg{width:21px;height:21px;}
+  .tab span{font-size:11px;font-weight:600;}
+  .tab.active{color:var(--accent-blue);}
+  .tab.active svg circle,.tab.active svg path{}
+
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms !important;transition-duration:.001ms !important;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ================= PLAYER ================= -->
+  <div class="player">
+    <div class="video-wrap" id="videoWrap">
+      <video id="video" playsinline muted autoplay loop></video>
+
+      <div class="scrim-top">
+        <button class="icon-btn" id="btnBack" aria-label="Volver" title="Volver">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="cam-info">
+          <h1 id="camTitle">Cámara Salón</h1>
+          <p id="camStatus">En directo</p>
+        </div>
+        <button class="icon-btn" id="btnAlarm" aria-label="Activar sirena" title="Sirena">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 0-5 5v2a8 8 0 0 1-2.3 5.6L4 15h16l-.7-.4A8 8 0 0 1 17 9V7a5 5 0 0 0-5-5Z"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0"/><path d="M12 2V1"/></svg>
+        </button>
+      </div>
+
+      <div class="center-tap" id="centerTap">
+        <svg id="centerIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      </div>
+
+      <div class="buffering" id="buffering" hidden><div class="spinner"></div></div>
+
+      <div class="scrim-bottom">
+        <div class="grp">
+          <button class="icon-btn" id="btnDownload" aria-label="Descargar grabación" title="Descargar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2"/></svg>
+          </button>
+          <button class="icon-btn" id="btnSnapshot" aria-label="Hacer captura" title="Captura">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.2l.9-1.6A1 1 0 0 1 9 4h6a1 1 0 0 1 .9.6L16.8 6H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.3"/></svg>
+          </button>
+        </div>
+        <div class="grp">
+          <button class="icon-btn" id="btnMute" aria-label="Silenciar" title="Silenciar">
+            <svg id="iconMute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4Z"/><path d="M16 8a5 5 0 0 1 0 8"/><path d="M19 5a9 9 0 0 1 0 14"/></svg>
+          </button>
+          <button class="icon-btn" id="btnFullscreen" aria-label="Pantalla completa" title="Pantalla completa">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+
+  <!-- ================= FECHA / LIVE ================= -->
+  <div class="date-bar">
+    <button class="date-pill" id="datePill" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
+      <span id="dateLabel">Hoy</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+      <input type="date" id="dateInput" aria-label="Elegir fecha">
+    </button>
+    <button class="live-btn" id="liveBtn" type="button">
+      <span class="dot"></span><span id="liveLabel">Directo</span>
+    </button>
+  </div>
+
+  <!-- ================= TIMELINE ================= -->
+  <div class="timeline-section">
+    <div class="timeline-wrap" id="timelineWrap" tabindex="0" aria-label="Línea de tiempo de grabaciones, usa las flechas izquierda y derecha para desplazarte">
+      <div class="timeline-scroll" id="timelineScroll">
+        <div class="timeline-track" id="timelineTrack"></div>
+      </div>
+      <div class="playhead"><div class="line"></div></div>
+    </div>
+    <div class="time-readout">
+      <span id="readoutTime">--:--:--</span><span class="day-label" id="readoutDay"></span>
+    </div>
+  </div>
+
+  <!-- ================= LISTA DE EVENTOS ================= -->
+  <div class="events" id="eventsList"></div>
+
+  <!-- ================= TAB BAR ================= -->
+  <nav class="tabbar">
+    <button class="tab active" type="button">
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="6" width="14" height="12" rx="2" fill="currentColor" opacity=".15"/><path d="M2 8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m20 9 2-1.3v8.6L20 15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+      <span>Actividad</span>
+    </button>
+    <button class="tab" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+      <span>Controles</span>
+    </button>
+    <button class="tab" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+      <span>Ajustes</span>
+    </button>
+  </nav>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================
+   CONFIGURACIÓN
+========================================================= */
+const PX_PER_MIN   = 2;                 // resolución horizontal del timeline
+const MIN_PER_DAY  = 24 * 60;
+const DAY_WIDTH     = MIN_PER_DAY * PX_PER_MIN;   // px por día (2880)
+const TICK_MIN      = 10;               // división mínima "oportuna": cada 10 min
+const PREPEND_TRIGGER_PX = DAY_WIDTH * 0.6; // cuando quede menos de esto a la izquierda, cargamos un día más antiguo
+
+const TYPES = {
+  motion : { label:'Movimiento detectado', color:'var(--blue-ev)',  hex:'#3b82f6', filled:false, icon:iconRun },
+  person : { label:'Persona detectada',     color:'var(--violet)',  hex:'#8b5cf6', filled:false, icon:iconPerson },
+  animal : { label:'Animal detectado',      color:'var(--green)',   hex:'#22c55e', filled:true,  icon:iconPaw },
+  vehicle: { label:'Vehículo detectado',    color:'var(--amber)',   hex:'#f59e0b', filled:false, icon:iconCar }
+};
+
+// Clips de muestra (vídeo real, dominio público) para simular grabaciones y directo.
+const CLIP_LIVE   = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
+const CLIPS_EVENT = [
+  'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4',
+  'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4'
+];
+
+/* =========================================================
+   UTILIDADES
+========================================================= */
+function pad2(n){ return String(n).padStart(2,'0'); }
+function dateKey(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function startOfDay(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function isSameDay(a,b){ return dateKey(a)===dateKey(b); }
+function minutesNow(d){ return d.getHours()*60 + d.getMinutes() + d.getSeconds()/60; }
+function fmtTime(minutes){
+  const h = Math.floor(minutes/60)%24, m = Math.floor(minutes%60), s = Math.floor((minutes*60)%60);
+  return pad2(h)+':'+pad2(m)+':'+pad2(s);
+}
+function fmtTimeShort(minutes){
+  const h = Math.floor(minutes/60)%24, m = Math.floor(minutes%60);
+  return pad2(h)+':'+pad2(m);
+}
+function fmtDateHeader(d){
+  return d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit'}) + ' ' + fmtTimeShort(minutesNow(d));
+}
+function pillLabel(d, today){
+  if(isSameDay(d,today)) return 'Hoy';
+  if(isSameDay(d,addDays(today,-1))) return 'Ayer';
+  return d.toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+}
+// PRNG determinista (mulberry32) sembrado por texto -> mismos eventos cada vez que se visita un día
+function hashString(str){
+  let h = 1779033703 ^ str.length;
+  for(let i=0;i<str.length;i++){
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return function(){
+    h = Math.imul(h ^ (h >>> 16), 2246822519);
+    h = Math.imul(h ^ (h >>> 13), 3266489917);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
+function mulberry32(seed){
+  let a = seed;
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function seededRand(key){
+  const seedFn = hashString(key);
+  const seed = Math.floor(seedFn()*1e9);
+  return mulberry32(seed);
+}
+
+/* =========================================================
+   ICONOS (SVG inline)
+========================================================= */
+function iconRun(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="15.5" cy="5" r="1.8" fill="currentColor" stroke="none"/><path d="M13 8l-2.5 3 2 2.3-1 5.2M10.5 11 7 12.5l-2 4M13 8 9.7 9.5l-.2 3.3M13 8l4 1.5 2.3 3.7"/></svg>';}
+function iconPerson(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5.5" r="2.2" fill="currentColor" stroke="none"/><path d="M8 21l1.2-6.5L7 12l2-4.2h6L17 12l-2.2 2.5L16 21"/><path d="M9.2 14.5h5.6"/></svg>';}
+function iconPaw(){return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><ellipse cx="7" cy="9" rx="1.7" ry="2.3"/><ellipse cx="12" cy="6.7" rx="1.8" ry="2.4"/><ellipse cx="17" cy="9" rx="1.7" ry="2.3"/><ellipse cx="19" cy="13.5" rx="1.6" ry="2.1"/><path d="M12 12c-3.1 0-5.6 2-5.6 4.3 0 1.7 1.4 2.7 3 2.4 1-.2 1.7-.9 2.6-.9s1.6.7 2.6.9c1.6.3 3-.7 3-2.4C17.6 14 15.1 12 12 12Z"/></svg>';}
+function iconCar(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16V11l2-4h12l2 4v5"/><path d="M4 16h16"/><circle cx="7.5" cy="16" r="1.6"/><circle cx="16.5" cy="16" r="1.6"/></svg>';}
+function iconPlay(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';}
+function iconPause(){return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';}
+
+/* =========================================================
+   GENERACIÓN DE DATOS DEL DÍA (determinista, offline)
+========================================================= */
+const dataCache = new Map(); // key -> {events, segments}
+
+function generateDay(dayDate, today){
+  const key = dateKey(dayDate);
+  if(dataCache.has(key)) return dataCache.get(key);
+
+  const rand = seededRand(key);
+  const isToday = isSameDay(dayDate, today);
+  const nowMin = isToday ? minutesNow(today) : MIN_PER_DAY;
+
+  const typeKeys = ['motion','motion','person','person','animal','vehicle'];
+  const count = 3 + Math.floor(rand()*6);
+  let events = [];
+  for(let i=0;i<count;i++){
+    const minute = Math.floor(rand()*MIN_PER_DAY);
+    if(minute > nowMin) continue;
+    const type = typeKeys[Math.floor(rand()*typeKeys.length)];
+    events.push({ id:key+'-'+i, minute, type });
+  }
+  events.sort((a,b)=>a.minute-b.minute);
+
+  // segmentos de grabación ligados a cada evento
+  let raw = events.map(ev=>{
+    const start = Math.max(0, ev.minute - 2 - Math.floor(rand()*3));
+    const end   = Math.min(nowMin, ev.minute + 4 + Math.floor(rand()*12));
+    return [start, end];
+  });
+  // algunos tramos de grabación "ambiente" adicionales
+  const extra = 2 + Math.floor(rand()*3);
+  for(let i=0;i<extra;i++){
+    const start = Math.floor(rand()*Math.max(1,nowMin));
+    const len = 15 + Math.floor(rand()*35);
+    raw.push([start, Math.min(nowMin, start+len)]);
+  }
+  raw.sort((a,b)=>a[0]-b[0]);
+  const segments = [];
+  for(const [s,e] of raw){
+    if(e<=s) continue;
+    const last = segments[segments.length-1];
+    if(last && s - last[1] <= 3){ last[1] = Math.max(last[1], e); }
+    else segments.push([s,e]);
+  }
+
+  const result = { events, segments, nowMin, isToday };
+  dataCache.set(key, result);
+  return result;
+}
+
+/* =========================================================
+   ESTADO GLOBAL DEL TIMELINE
+========================================================= */
+const today = new Date();
+let loadedDays = [];      // array ascendente de {date, key, data}
+let selectedEvent = null; // evento actualmente reproducido
+let liveMode = true;
+let isScrubbing = false;
+
+const track = document.getElementById('timelineTrack');
+const scrollEl = document.getElementById('timelineScroll');
+const wrapEl = document.getElementById('timelineWrap');
+const readoutTime = document.getElementById('readoutTime');
+const readoutDay = document.getElementById('readoutDay');
+const eventsListEl = document.getElementById('eventsList');
+const datePill = document.getElementById('dateLabel');
+const dateInput = document.getElementById('dateInput');
+const liveBtn = document.getElementById('liveBtn');
+const liveLabel = document.getElementById('liveLabel');
+
+function dayIndexToDate(i){ return loadedDays[i] ? loadedDays[i].date : null; }
+
+function buildDayColumn(dayDate){
+  const { events, segments, nowMin, isToday } = generateDay(dayDate, today);
+  const col = document.createElement('div');
+  col.className = 'day-col';
+  col.style.width = DAY_WIDTH + 'px';
+  col.dataset.key = dateKey(dayDate);
+
+  let html = '';
+  // zonas nocturnas (00-06h y 21-24h) sutiles
+  html += `<div class="night-zone" style="left:0;width:${6*60*PX_PER_MIN}px"></div>`;
+  html += `<div class="night-zone" style="left:${21*60*PX_PER_MIN}px;width:${3*60*PX_PER_MIN}px"></div>`;
+
+  // marcas de horas
+  for(let h=0; h<24; h++){
+    const x = h*60*PX_PER_MIN;
+    html += `<div class="hour-tick major" style="left:${x}px"></div>`;
+    html += `<div class="hour-label" style="left:${x}px">${fmtHourLabel(h)}</div>`;
+    for(let m=TICK_MIN; m<60; m+=TICK_MIN){
+      html += `<div class="hour-tick" style="left:${x+m*PX_PER_MIN}px"></div>`;
+    }
+  }
+
+  // tramos grabados
+  for(const [s,e] of segments){
+    const left = s*PX_PER_MIN, width = Math.max(2,(e-s)*PX_PER_MIN);
+    html += `<div class="rec-seg" style="left:${left}px;width:${width}px"></div>`;
+  }
+
+  // marcador de "ahora"
+  if(isToday){
+    html += `<div class="now-line" style="left:${nowMin*PX_PER_MIN}px"></div>`;
+  }
+
+  // eventos
+  for(const ev of events){
+    const t = TYPES[ev.type];
+    const left = ev.minute*PX_PER_MIN;
+    html += `<div class="ev-mark" data-id="${ev.id}" style="left:${left}px;background:${t.hex};color:${t.hex}" title="${t.label}"></div>`;
+  }
+
+  col.innerHTML = html;
+  return col;
+}
+
+function fmtHourLabel(h){
+  if(h===0) return '12am';
+  if(h===12) return '12pm';
+  return h<12 ? h+'am' : (h-12)+'pm';
+}
+
+function rebuildTrack(){
+  track.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  for(const d of loadedDays) frag.appendChild(buildDayColumn(d.date));
+  track.appendChild(frag);
+  markSelectedMark();
+}
+
+function absoluteX(dayIndex, minute){
+  return dayIndex*DAY_WIDTH + minute*PX_PER_MIN;
+}
+
+function loadInitialDays(){
+  loadedDays = [
+    { date: addDays(startOfDay(today), -2) },
+    { date: addDays(startOfDay(today), -1) },
+    { date: startOfDay(today) }
+  ];
+  rebuildTrack();
+  // centrar el playhead en "ahora"
+  requestAnimationFrame(()=>{
+    const wrapW = wrapEl.clientWidth;
+    const x = absoluteX(loadedDays.length-1, minutesNow(today));
+    scrollEl.scrollLeft = Math.max(0, x - wrapW/2);
+    updateReadout();
+  });
+}
+
+function prependOlderDay(){
+  const oldest = loadedDays[0].date;
+  const newDate = addDays(oldest, -1);
+  loadedDays.unshift({ date: newDate });
+  const col = buildDayColumn(newDate);
+  track.insertBefore(col, track.firstChild);
+  // compensar el scroll para que la vista no salte
+  scrollEl.scrollLeft += DAY_WIDTH;
+}
+
+function jumpToDate(target){
+  const t = startOfDay(target);
+  const todayStart = startOfDay(today);
+  const clamped = t > todayStart ? todayStart : t;
+  loadedDays = [
+    { date: addDays(clamped, -1) },
+    { date: clamped },
+    { date: addDays(clamped, 1) > todayStart ? todayStart : addDays(clamped,1) }
+  ];
+  // evitar duplicados si clamped ya es hoy
+  loadedDays = loadedDays.filter((d,i,arr)=> i===0 || dateKey(d.date)!==dateKey(arr[i-1].date));
+  rebuildTrack();
+  requestAnimationFrame(()=>{
+    const wrapW = wrapEl.clientWidth;
+    const idx = loadedDays.findIndex(d=>isSameDay(d.date, clamped));
+    const centerMinute = isSameDay(clamped, today) ? minutesNow(today) : 12*60;
+    const x = absoluteX(idx, centerMinute);
+    scrollEl.scrollLeft = Math.max(0, x - wrapW/2);
+    updateReadout();
+    renderEventsForCenter();
+  });
+}
+
+/* =========================================================
+   LECTURA DEL CENTRO (playhead fijo, contenido se desplaza)
+========================================================= */
+function centerInfo(){
+  const wrapW = wrapEl.clientWidth;
+  const centerX = scrollEl.scrollLeft + wrapW/2;
+  let idx = Math.floor(centerX / DAY_WIDTH);
+  idx = Math.max(0, Math.min(loadedDays.length-1, idx));
+  const minute = (centerX - idx*DAY_WIDTH) / PX_PER_MIN;
+  return { idx, minute: Math.max(0,Math.min(MIN_PER_DAY,minute)), date: loadedDays[idx] ? loadedDays[idx].date : today };
+}
+
+function updateReadout(){
+  const info = centerInfo();
+  readoutTime.textContent = fmtTime(info.minute);
+  readoutDay.textContent = '· ' + pillLabel(info.date, today);
+  datePill.textContent = pillLabel(info.date, today);
+}
+
+let renderEventsTimer = null;
+function renderEventsForCenter(){
+  const info = centerInfo();
+  const { events } = generateDay(info.date, today);
+  const sorted = [...events].sort((a,b)=>b.minute-a.minute);
+  eventsListEl.innerHTML = '';
+  if(sorted.length===0){
+    eventsListEl.innerHTML = '<div class="empty-day">Sin eventos detectados este día</div>';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  for(const ev of sorted){
+    frag.appendChild(buildEventRow(ev, info.date));
+  }
+  eventsListEl.appendChild(frag);
+}
+
+function buildEventRow(ev, dayDate){
+  const t = TYPES[ev.type];
+  const row = document.createElement('div');
+  row.className = 'ev-row';
+  row.dataset.id = ev.id;
+  row.tabIndex = 0;
+  row.style.setProperty('--ev-color', t.hex);
+  const isActive = selectedEvent && selectedEvent.id === ev.id;
+  if(isActive) row.classList.add('active');
+
+  row.innerHTML = `
+    <div class="ev-thumb">
+      <div class="art"></div>
+      <div class="play-ico">${iconPlay()}</div>
+      <div class="pause-ico">${iconPause()}</div>
+    </div>
+    <div class="ev-mid">
+      <p class="ev-title">${t.label}</p>
+      <p class="ev-sub">${dayDate.toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</p>
+    </div>
+    <span class="ev-time">${fmtTimeShort(ev.minute)}</span>
+    <div class="ev-badge ${t.filled?'filled':''}" style="--ev-color:${t.hex}">${t.icon()}</div>
+  `;
+  row.addEventListener('click', ()=> selectEvent(ev, dayDate));
+  row.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); selectEvent(ev, dayDate);} });
+  return row;
+}
+
+function markSelectedMark(){
+  document.querySelectorAll('.ev-mark.selected').forEach(n=>n.classList.remove('selected'));
+  if(selectedEvent){
+    const n = track.querySelector(`.ev-mark[data-id="${CSS.escape(selectedEvent.id)}"]`);
+    if(n) n.classList.add('selected');
+  }
+}
+
+/* =========================================================
+   SCROLL / DRAG / TECLADO
+========================================================= */
+let scrollRAF = null;
+scrollEl.addEventListener('scroll', ()=>{
+  if(scrollRAF) return;
+  scrollRAF = requestAnimationFrame(()=>{
+    scrollRAF = null;
+    if(scrollEl.scrollLeft < PREPEND_TRIGGER_PX){
+      prependOlderDay();
+    }
+    // no permitir desplazarse más allá de "ahora" en el día actual
+    const maxIdx = loadedDays.length-1;
+    const maxX = absoluteX(maxIdx, minutesNow(today)) - wrapEl.clientWidth/2 + 2;
+    if(isSameDay(loadedDays[maxIdx].date, today) && scrollEl.scrollLeft > maxX){
+      scrollEl.scrollLeft = Math.max(0,maxX);
+    }
+    updateReadout();
+    clearTimeout(renderEventsTimer);
+    renderEventsTimer = setTimeout(renderEventsForCenter, 140);
+  });
+});
+
+// arrastre con ratón en escritorio
+let dragStartX=0, dragStartScroll=0, dragging=false;
+scrollEl.addEventListener('mousedown', e=>{
+  dragging = true; dragStartX = e.pageX; dragStartScroll = scrollEl.scrollLeft;
+  scrollEl.classList.add('dragging');
+});
+window.addEventListener('mousemove', e=>{
+  if(!dragging) return;
+  scrollEl.scrollLeft = dragStartScroll - (e.pageX - dragStartX);
+});
+window.addEventListener('mouseup', ()=>{ dragging=false; scrollEl.classList.remove('dragging'); });
+
+// clic directo sobre la pista para saltar a ese instante
+scrollEl.addEventListener('click', e=>{
+  if(Math.abs(e.pageX-dragStartX) > 4) return; // era arrastre, no clic
+  const rect = scrollEl.getBoundingClientRect();
+  const x = scrollEl.scrollLeft + (e.clientX - rect.left);
+  scrollEl.scrollTo({ left: x - wrapEl.clientWidth/2, behavior:'smooth' });
+});
+
+wrapEl.addEventListener('keydown', e=>{
+  const step = TICK_MIN*PX_PER_MIN;
+  if(e.key==='ArrowLeft'){ scrollEl.scrollLeft -= step; e.preventDefault(); }
+  if(e.key==='ArrowRight'){ scrollEl.scrollLeft += step; e.preventDefault(); }
+});
+
+/* =========================================================
+   SELECCIÓN DE EVENTOS EN EL TIMELINE
+========================================================= */
+track.addEventListener('click', e=>{
+  const mark = e.target.closest('.ev-mark');
+  if(!mark) return;
+  e.stopPropagation();
+  const col = mark.closest('.day-col');
+  const key = col.dataset.key;
+  const dayEntry = loadedDays.find(d=>dateKey(d.date)===key);
+  const { events } = generateDay(dayEntry.date, today);
+  const ev = events.find(x=>x.id===mark.dataset.id);
+  if(ev) selectEvent(ev, dayEntry.date, true);
+});
+
+function selectEvent(ev, dayDate, fromTimeline){
+  selectedEvent = ev;
+  liveMode = false;
+  updateLiveUI();
+  markSelectedMark();
+  document.querySelectorAll('.ev-row.active').forEach(r=>r.classList.remove('active'));
+  const row = eventsListEl.querySelector(`.ev-row[data-id="${CSS.escape(ev.id)}"]`);
+  if(row){ row.classList.add('active'); row.scrollIntoView({block:'nearest', behavior:'smooth'}); }
+
+  const t = TYPES[ev.type];
+  document.getElementById('camStatus').innerHTML =
+    '<span class="dot-rec"></span>' + t.label + ' &nbsp;|&nbsp; ' + fmtDateOf(dayDate, ev.minute);
+
+  const clip = CLIPS_EVENT[Math.abs(hashCode(ev.id)) % CLIPS_EVENT.length];
+  playClip(clip);
+
+  if(!fromTimeline){
+    const idx = loadedDays.findIndex(d=>isSameDay(d.date, dayDate));
+    const x = absoluteX(idx, ev.minute);
+    scrollEl.scrollTo({ left: x - wrapEl.clientWidth/2, behavior:'smooth' });
+  }
+}
+function hashCode(str){ let h=0; for(let i=0;i<str.length;i++){ h=(h<<5)-h+str.charCodeAt(i); h|=0; } return h; }
+function fmtDateOf(dayDate, minute){
+  const d = new Date(dayDate); d.setMinutes(minute);
+  return d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit'}) + ' ' + fmtTimeShort(minute);
+}
+
+/* =========================================================
+   REPRODUCTOR
+========================================================= */
+const video = document.getElementById('video');
+const buffering = document.getElementById('buffering');
+const centerTap = document.getElementById('centerTap');
+const centerIcon = document.getElementById('centerIcon');
+const toast = document.getElementById('toast');
+const btnDownload = document.getElementById('btnDownload');
+
+function showToast(msg){
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=>toast.classList.remove('show'), 2200);
+}
+
+function playClip(src){
+  video.muted = true; // los navegadores exigen mute para autoplay
+  if(video.currentSrc !== src){
+    video.src = src;
+  }
+  const p = video.play();
+  if(p && p.catch) p.catch(()=>{});
+  btnDownload.removeAttribute('disabled');
+}
+
+function goLive(){
+  liveMode = true;
+  selectedEvent = null;
+  markSelectedMark();
+  document.querySelectorAll('.ev-row.active').forEach(r=>r.classList.remove('active'));
+  document.getElementById('camStatus').innerHTML = 'En directo';
+  updateLiveUI();
+  playClip(CLIP_LIVE);
+  btnDownload.setAttribute('disabled','');
+  // recentrar en "ahora" del día actual
+  const idx = loadedDays.length-1;
+  if(isSameDay(loadedDays[idx].date, today)){
+    const x = absoluteX(idx, minutesNow(today));
+    scrollEl.scrollTo({ left: x - wrapEl.clientWidth/2, behavior:'smooth' });
+  } else {
+    jumpToDate(today);
+  }
+}
+function updateLiveUI(){
+  liveBtn.classList.toggle('active', liveMode);
+  liveLabel.textContent = liveMode ? 'En directo' : 'Directo';
+}
+
+liveBtn.addEventListener('click', goLive);
+
+video.addEventListener('waiting', ()=> buffering.hidden = false);
+video.addEventListener('playing', ()=> buffering.hidden = true);
+video.addEventListener('canplay', ()=> buffering.hidden = true);
+
+document.getElementById('videoWrap').addEventListener('click', e=>{
+  if(e.target.closest('.icon-btn')) return;
+  if(video.paused){ video.play(); centerIcon.innerHTML = iconPlaySVGPath(); }
+  else { video.pause(); }
+  centerIcon.innerHTML = video.paused ? '<path d="M8 5v14l11-7z"/>' : '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>';
+  centerTap.classList.add('show');
+  clearTimeout(document._ctT);
+  document._ctT = setTimeout(()=>centerTap.classList.remove('show'), 550);
+});
+function iconPlaySVGPath(){ return '<path d="M8 5v14l11-7z"/>'; }
+
+// mute
+const btnMute = document.getElementById('btnMute');
+const iconMute = document.getElementById('iconMute');
+btnMute.addEventListener('click', ()=>{
+  video.muted = !video.muted;
+  iconMute.innerHTML = video.muted
+    ? '<path d="M11 5 6 9H3v6h3l5 4Z"/><path d="M16 10l5 5M21 10l-5 5"/>'
+    : '<path d="M11 5 6 9H3v6h3l5 4Z"/><path d="M16 8a5 5 0 0 1 0 8"/><path d="M19 5a9 9 0 0 1 0 14"/>';
+});
+
+// fullscreen
+document.getElementById('btnFullscreen').addEventListener('click', ()=>{
+  const wrap = document.getElementById('videoWrap');
+  if(document.fullscreenElement){ document.exitFullscreen(); }
+  else if(wrap.requestFullscreen){ wrap.requestFullscreen().catch(()=>showToast('Pantalla completa no disponible')); }
+  else showToast('Pantalla completa no disponible');
+});
+
+// snapshot -> canvas -> PNG
+document.getElementById('btnSnapshot').addEventListener('click', ()=>{
+  try{
+    const c = document.createElement('canvas');
+    c.width = video.videoWidth || 640;
+    c.height = video.videoHeight || 480;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(video,0,0,c.width,c.height);
+    const url = c.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'captura-camara-salon-' + Date.now() + '.png';
+    a.click();
+    showToast('Captura guardada');
+  }catch(err){
+    showToast('No se pudo generar la captura');
+  }
+});
+
+// descarga de grabación
+btnDownload.addEventListener('click', async ()=>{
+  if(btnDownload.hasAttribute('disabled')) return;
+  const src = video.currentSrc || video.src;
+  try{
+    showToast('Preparando descarga…');
+    const res = await fetch(src, { mode:'cors' });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'grabacion-camara-salon-' + Date.now() + '.mp4';
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  }catch(err){
+    const a = document.createElement('a');
+    a.href = src; a.target = '_blank'; a.rel='noopener';
+    a.click();
+    showToast('Se abrió el vídeo en una pestaña nueva');
+  }
+});
+
+document.getElementById('btnAlarm').addEventListener('click', ()=> showToast('Sirena activada'));
+document.getElementById('btnBack').addEventListener('click', ()=> showToast('Volver'));
+
+/* =========================================================
+   SELECTOR DE FECHA
+========================================================= */
+const maxDateStr = dateKey(today);
+dateInput.max = maxDateStr;
+dateInput.value = maxDateStr;
+document.getElementById('datePill').addEventListener('click', ()=>{
+  if(dateInput.showPicker){ try{ dateInput.showPicker(); }catch(e){ dateInput.focus(); } }
+  else dateInput.focus();
+});
+dateInput.addEventListener('change', ()=>{
+  if(!dateInput.value) return;
+  const [y,m,d] = dateInput.value.split('-').map(Number);
+  const target = new Date(y, m-1, d);
+  jumpToDate(target);
+});
+
+/* =========================================================
+   RELOJ EN VIVO (mueve la marca "ahora" cada minuto)
+========================================================= */
+setInterval(()=>{
+  const now = new Date();
+  const idx = loadedDays.length-1;
+  if(loadedDays[idx] && isSameDay(loadedDays[idx].date, today)){
+    dataCache.delete(dateKey(today)); // recalcular ventana de "ahora"
+    const col = track.children[idx];
+    if(col){
+      const fresh = buildDayColumn(loadedDays[idx].date);
+      col.replaceWith(fresh);
+    }
+  }
+  if(liveMode) updateReadout();
+}, 60000);
+
+/* =========================================================
+   INICIO
+========================================================= */
+loadInitialDays();
+renderEventsForCenter();
+updateLiveUI();
+playClip(CLIP_LIVE);
+btnDownload.setAttribute('disabled','');
+
+})();
+</script>
+</body>
+</html>

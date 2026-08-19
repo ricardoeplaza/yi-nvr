@@ -1,0 +1,114 @@
+.settings {
+  padding: 16px 14px 20px;
+}
+
+.settings-header h1 {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0 0 16px;
+}
+
+.settings-section {
+  margin-bottom: 24px;
+
+  h2 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 10px;
+  }
+}
+
+.push-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 16px;
+
+  .push-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+
+    .push-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .push-desc {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+  }
+
+  .push-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+
+    .push-status {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-faint);
+
+      &.active { color: var(--green); }
+      &.error { color: var(--red); }
+    }
+  }
+}
+
+.btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity .15s;
+
+  &:active { opacity: .8; }
+
+  &.btn-primary {
+    background: var(--accent-blue);
+    color: #fff;
+  }
+
+  &.btn-outline {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+  }
+
+  &.btn-danger {
+    background: var(--red);
+    color: #fff;
+  }
+
+  &.full-width {
+    width: 100%;
+    padding: 12px;
+  }
+}
+
+.about-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 4px 16px;
+
+  .about-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 0;
+    font-size: 13px;
+    border-bottom: 1px solid var(--line);
+
+    &:last-child { border-bottom: none; }
+
+    span:first-child { color: var(--text-dim); }
+    span:last-child { font-weight: 600; color: var(--text); }
+  }
+}

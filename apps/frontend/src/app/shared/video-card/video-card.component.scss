@@ -1,0 +1,80 @@
+.video-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  transition: background 0.15s ease;
+
+  &:active {
+    background: #eef2f7;
+  }
+}
+
+.video-thumb {
+  flex-shrink: 0;
+  width: 72px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--track-bg);
+}
+
+.video-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.video-camera {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-time {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.video-duration {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.video-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.video-size {
+  font-size: 11px;
+  color: var(--text-faint);
+  background: var(--track-bg);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.video-delete {
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  line-height: 1;
+
+  &:active {
+    background: rgba(239, 68, 68, 0.12);
+  }
+}
