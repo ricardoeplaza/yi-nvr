@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# Storage: videos, processed media, SQLite DB (real data, never in git)
+src/storage/
+storage/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# Builds / generated
+dist/
+.angular/
+apps/api/public/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+Thumbs.db
+.DS_Store
