@@ -21,6 +21,13 @@
  *  - POST /api/cameras/group/power - Comando MQTT a un grupo de cámaras
  *  - GET /api/timeline        - Datos agregados para el timeline
  *  - GET /api/cameras/:id/stream - URLs de streaming (WebRTC/HLS) vía go2rtc
+ *  - GET /api/push/vapid-public-key - Clave pública VAPID (o null)
+ *  - POST /api/push/subscribe - Suscribe un endpoint Web Push
+ *  - POST /api/push/unsubscribe - Quita una suscripción por endpoint
+ *
+ * Web Push (fase 4): los triggers son el evento `camera-motion` del cliente
+ * MQTT (notify inmediato) y el clip indexado en ftp.js. Sin claves VAPID el
+ * módulo push funciona en modo noop (no envía, no falla).
  *
  * Proxy go2rtc (live view):
  *  - /stream-proxy/* → GO2RTC_URL (env, default http://go2rtc:1984)
@@ -65,6 +72,9 @@ const videosRouter = require('./routes/videos');
 const camerasRouter = require('./routes/cameras');
 const timelineRouter = require('./routes/timeline');
 const streamRouter = require('./routes/stream');
+const pushRouter = require('./routes/push');
+const webpush = require('./push/webpush');
+const cameraRegistry = require('./camera-registry');
 
 // Configuración
 const PORT = process.env.PORT || 3000;
@@ -135,6 +145,30 @@ app.use('/api', videosRouter);
 app.use('/api', camerasRouter);
 app.use('/api', timelineRouter);
 app.use('/api', streamRouter);
+app.use('/api', pushRouter);
+
+// ============================================
+// WEB PUSH - TRIGGER DE MOVIMIENTO (fase 4)
+// ============================================
+
+// Escuchamos el bus del cliente MQTT (NO acoplado dentro de mqtt/client.js):
+// cada evento de movimiento dispara una notificación push inmediata.
+// notify() es a prueba de fallos (no lanza), pero lo envolvemos igualmente
+// para que ningún error de este handler tume el pipeline de eventos.
+mqttClient.mqttEvents.on('camera-motion', ({ cameraId, eventType }) => {
+    try {
+        const camera = cameraRegistry.getCameraById(cameraId);
+        const cameraName = camera ? camera.name : cameraId;
+        console.log(`[Push] Movimiento de ${cameraId} (${eventType}), notificando`);
+        webpush.notify({
+            title: 'Movimiento',
+            body: cameraName,
+            url: `/cameras/${cameraId}`
+        });
+    } catch (e) {
+        console.error('[Push] Error en el trigger de movimiento:', e.message);
+    }
+});
 
 // ============================================
 // PROXY go2rtc (live view)
@@ -198,8 +232,14 @@ async function startServices() {
             console.log(`         POST /api/cameras/group/power`);
             console.log(`         GET /api/timeline`);
             console.log(`         GET /api/cameras/:id/stream`);
+            console.log(`         GET /api/push/vapid-public-key`);
+            console.log(`         POST /api/push/subscribe`);
+            console.log(`         POST /api/push/unsubscribe`);
             console.log(`         /stream-proxy/* → ${GO2RTC_URL}`);
         });
+
+        // Job de limpieza de suscripciones push antiguas (diario, offset aleatorio)
+        webpush.startCleanupJob();
 
         // Cliente MQTT: NO bloquea el listen. Si el broker no está disponible
         // (dev en Windows sin Mosquitto), el cliente se queda reintentando en
@@ -216,6 +256,7 @@ async function startServices() {
 function shutdown(signal) {
     console.log(`[Server] Recibido ${signal}, cerrando servicios...`);
     mqttClient.stop();
+    webpush.stopCleanupJob();
     process.exit(0);
 }
 

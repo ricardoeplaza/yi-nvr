@@ -331,3 +331,41 @@ programa RTSP consume menos CPU/RAM bajo la misma carga.
 - Opción elegida como default para las cámaras del proyecto:
 - Razón (datos de la tabla):
 - Fecha de las pruebas:
+
+### D15 (fase 4) — Web Push: VAPID, suscripciones y triggers
+- **Dependencia**: `web-push` (npm), la única nueva de la fase.
+- **Claves VAPID**: se generan con `npx web-push generate-vapid-keys`
+  (desde `apps/api`). Las claves van **SOLO en el `.env` de la raíz**
+  (gitignored): `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+  `VAPID_CONTACT_EMAIL` (debe ser `mailto:...`). **Nunca** en git: los
+  placeholders de `.env.example` se dejan vacíos y este archivo solo
+  documenta el comando de generación.
+- **Modo noop**: sin las tres variables VAPID, `push/webpush.js` no envía
+  nada (log a nivel debug `[Push] VAPID no configurado...`) y devuelve
+  `{delivered:0, failed:0, removed:0, noop:true}`. El resto del sistema
+  (HTTP/FTP/MQTT) funciona igual; el endpoint `GET /api/push/vapid-public-key`
+  devuelve `publicKey: null` y el frontend degrada a "sin notificaciones".
+- **Suscripciones**: tabla `push_subscriptions` (endpoint PK, p256dh, auth,
+  user_agent, created_at, last_used_at). Upsert por `endpoint`; HTTP 404/410
+  del push service → la fila se borra (suscripción caducada); HTTP 2xx →
+  `last_used_at` se actualiza. Un job diario (offset aleatorio 0-30 min,
+  timers `.unref()`) borra las filas con `COALESCE(last_used_at, created_at)`
+  anterior a 180 días.
+- **Formato del payload** (decisión menor): JSON plano
+  `{title, body, icon, url, data}`. El service worker del frontend (fase 5)
+  lo parsea y construye la `Notification` del navegador; `icon` es la URL
+  relativa del thumbnail (`/processed/<archivo>.jpg`) y `url` la ruta de la
+  app a la que enlazar al hacer clic.
+- **Triggers** (sin acoplar push dentro de `mqtt/client.js`):
+  - *Movimiento* (inmediato): `server.js` se suscribe a
+    `mqttEvents.on('camera-motion')` y llama a `notify({title:'Movimiento',
+    body:<nombre>, url:'/cameras/<id>'})`.
+  - *Clip procesado* (enriquecido): `ftp.js` (`handleNewVideo`) llama a
+    `notify({title:'Nuevo clip', body:<cámara>, icon:<thumbnail_url>,
+    url:'/videos/<id>'})` tras `processVideo` + `insertVideo` exitosos.
+  - `notify()` es a prueba de fallos por diseño (try/catch + manejo de
+    promesa por envío; nunca lanza al llamador).
+- **DEFERRED**: la entrega real en un navegador (service worker de push,
+  permiso del usuario, prueba con endpoint FCM real) queda pendiente de la
+  fase 5 (frontend). En esta fase se verifica el fan-out HTTP contra
+  endpoints falsos (2xx/404/410) y el trigger MQTT de movimiento.

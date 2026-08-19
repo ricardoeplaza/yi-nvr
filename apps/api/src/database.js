@@ -78,6 +78,22 @@ function initSchema() {
     db.exec(createMqttEvents);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_mqtt_events_camera ON mqtt_events(camera_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_mqtt_events_received ON mqtt_events(received_at)`);
+
+    // Suscripciones Web Push (fase 4): una fila por endpoint de push.
+    // p256dh/auth: claves de cifrado de la suscripción (base64url).
+    // last_used_at: última entrega exitosa (NULL = nunca entregada); se usa
+    // en la limpieza de suscripciones antiguas.
+    const createPushSubscriptions = `
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+            endpoint TEXT PRIMARY KEY,
+            p256dh TEXT,
+            auth TEXT,
+            user_agent TEXT,
+            created_at TEXT,
+            last_used_at TEXT
+        )
+    `;
+    db.exec(createPushSubscriptions);
 }
 
 /**
@@ -206,6 +222,93 @@ function deleteVideo(id) {
     return result.changes > 0;
 }
 
+// ============================================
+// CRUD de suscripciones Web Push
+// ============================================
+
+/**
+ * Inserta o reemplaza una suscripción de push (upsert por endpoint).
+ * @param {Object} sub - {endpoint, p256dh, auth, userAgent}
+ * @returns {Object} - La fila guardada
+ */
+function upsertPushSubscription(sub) {
+    const now = new Date().toISOString();
+    const stmt = db.prepare(`
+        INSERT INTO push_subscriptions (endpoint, p256dh, auth, user_agent, created_at, last_used_at)
+        VALUES (@endpoint, @p256dh, @auth, @userAgent, @createdAt, NULL)
+        ON CONFLICT(endpoint) DO UPDATE SET
+            p256dh = excluded.p256dh,
+            auth = excluded.auth,
+            user_agent = COALESCE(excluded.user_agent, push_subscriptions.user_agent),
+            created_at = push_subscriptions.created_at
+    `);
+    stmt.run({
+        endpoint: sub.endpoint,
+        p256dh: sub.p256dh,
+        auth: sub.auth,
+        userAgent: sub.userAgent || null,
+        createdAt: now
+    });
+    return getPushSubscription(sub.endpoint);
+}
+
+/**
+ * Obtiene una suscripción por su endpoint.
+ * @param {string} endpoint
+ * @returns {Object|null}
+ */
+function getPushSubscription(endpoint) {
+    const stmt = db.prepare('SELECT * FROM push_subscriptions WHERE endpoint = ?');
+    return stmt.get(endpoint) || null;
+}
+
+/**
+ * Lista todas las suscripciones activas.
+ * @returns {Array<Object>}
+ */
+function getAllPushSubscriptions() {
+    const stmt = db.prepare('SELECT * FROM push_subscriptions ORDER BY created_at');
+    return stmt.all();
+}
+
+/**
+ * Elimina una suscripción por su endpoint.
+ * @param {string} endpoint
+ * @returns {boolean} - true si existía
+ */
+function deletePushSubscription(endpoint) {
+    const stmt = db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?');
+    const result = stmt.run(endpoint);
+    return result.changes > 0;
+}
+
+/**
+ * Borra las suscripciones cuyo último uso (o creación, si nunca se usaron)
+ * es anterior a `maxAgeDays` días.
+ * @param {number} maxAgeDays
+ * @returns {number} - Número de filas borradas
+ */
+function deleteStalePushSubscriptions(maxAgeDays) {
+    const cutoff = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
+    const stmt = db.prepare(`
+        DELETE FROM push_subscriptions
+        WHERE COALESCE(last_used_at, created_at) < ?
+    `);
+    const result = stmt.run(cutoff);
+    return result.changes;
+}
+
+/**
+ * Actualiza last_used_at de una suscripción (tras una entrega exitosa).
+ * @param {string} endpoint
+ */
+function touchPushSubscription(endpoint) {
+    const stmt = db.prepare(`
+        UPDATE push_subscriptions SET last_used_at = ? WHERE endpoint = ?
+    `);
+    stmt.run(new Date().toISOString(), endpoint);
+}
+
 // Inicializamos el esquema al cargar el módulo
 initSchema();
 
@@ -218,5 +321,11 @@ module.exports = {
     getTimelineData,
     updateVideo,
     deleteVideo,
+    upsertPushSubscription,
+    getPushSubscription,
+    getAllPushSubscriptions,
+    deletePushSubscription,
+    deleteStalePushSubscriptions,
+    touchPushSubscription,
     db
 };

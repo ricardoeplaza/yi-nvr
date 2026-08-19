@@ -23,6 +23,7 @@ const fs = require('fs');
 const { processVideo } = require('./processor');
 const { insertVideo } = require('./database');
 const { getCameraByFtpDir } = require('./camera-registry');
+const webpush = require('./push/webpush');
 
 // Configuración del servidor FTP
 const FTP_PORT = process.env.FTP_PORT || 2121;
@@ -152,6 +153,23 @@ async function handleNewVideo(filePath) {
         });
 
         console.log(`[FTP] Video indexado correctamente. ID: ${videoRecord.id}, Cámara: ${cameraName}`);
+
+        // Notificación push del clip procesado (fase 4). notify() nunca lanza,
+        // pero lo envolvemos igualmente para que el fallo (si apareciera) no
+        // rompa el pipeline de indexación del clip.
+        try {
+            const thumbnailUrl = videoRecord.thumbnail_path
+                ? `/processed/${path.basename(videoRecord.thumbnail_path)}`
+                : undefined;
+            webpush.notify({
+                title: 'Nuevo clip',
+                body: cameraName,
+                icon: thumbnailUrl,
+                url: `/videos/${videoRecord.id}`
+            });
+        } catch (e) {
+            console.error('[FTP] Error en la notificación push del clip:', e.message);
+        }
 
     } catch (err) {
         console.error(`[FTP] Error procesando ${path.basename(filePath)}:`, err.message);
