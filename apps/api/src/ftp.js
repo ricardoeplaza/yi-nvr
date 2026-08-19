@@ -30,7 +30,24 @@ const FTP_USER = process.env.FTP_USER || 'camera';
 const FTP_PASS = process.env.FTP_PASS || 'surveillance123';
 
 // Directorio donde se almacenan los videos recibidos por FTP
-const FTP_ROOT = path.join(__dirname, 'storage', 'ftp');
+const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.join(__dirname, 'storage');
+const FTP_ROOT = path.join(STORAGE_DIR, 'ftp');
+
+// Rango de puertos pasivos (override vía env, ej. "2000-2050", p. ej. si Hyper-V/WSL2
+// reserva 1024-1050 en Windows). Default: 1024-1050.
+let FTP_PASV_MIN = 1024;
+let FTP_PASV_MAX = 1050;
+if (process.env.FTP_PASSIVE_RANGE) {
+    const parts = process.env.FTP_PASSIVE_RANGE.split('-');
+    const min = parseInt(parts[0], 10);
+    const max = parseInt(parts[1], 10);
+    if (Number.isInteger(min) && Number.isInteger(max) && min > 0 && max >= min) {
+        FTP_PASV_MIN = min;
+        FTP_PASV_MAX = max;
+    } else {
+        console.warn(`[FTP] FTP_PASSIVE_RANGE inválido: "${process.env.FTP_PASSIVE_RANGE}", usando 1024-1050`);
+    }
+}
 
 // Set para rastrear archivos que ya están siendo procesados
 // (evita procesamiento duplicado)
@@ -45,8 +62,8 @@ if (!fs.existsSync(FTP_ROOT)) {
 const ftpServer = new FtpSrv({
     url: `ftp://${FTP_HOST}:${FTP_PORT}`,
     pasv_url: FTP_HOST,
-    pasv_min: 1024,
-    pasv_max: 1050,
+    pasv_min: FTP_PASV_MIN,
+    pasv_max: FTP_PASV_MAX,
     anonymous: false,
     greeting: ['Welcome to Surveillance Center FTP Server', 'Please authenticate to upload videos.']
 });

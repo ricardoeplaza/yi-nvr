@@ -7,7 +7,7 @@ node_modules/
 !.env.example
 
 # Storage: videos, processed media, SQLite DB (real data, never in git)
-src/storage/
+apps/api/src/storage/
 storage/
 *.db
 *.db-wal

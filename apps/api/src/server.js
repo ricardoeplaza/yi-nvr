@@ -17,8 +17,11 @@
  * Los videos procesados se sirven desde /storage/processed.
  */
 
-const express = require('express');
 const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '..', '..', '.env') });
+require('dotenv').config();
+
+const express = require('express');
 const fs = require('fs');
 const { startFtpServer } = require('./ftp');
 const { getVideos, getVideoById, getAllCameras, getTimelineData, deleteVideo } = require('./database');
@@ -26,6 +29,9 @@ const { getVideos, getVideoById, getAllCameras, getTimelineData, deleteVideo } =
 // Configuración
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
+
+// Directorio de almacenamiento (override vía env para Docker; por defecto src/storage)
+const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.join(__dirname, 'storage');
 
 // Creamos la aplicación Express
 const app = express();
@@ -41,10 +47,10 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Videos procesados: servimos thumbnails y previews
-app.use('/processed', express.static(path.join(__dirname, 'storage', 'processed')));
+app.use('/processed', express.static(path.join(STORAGE_DIR, 'processed')));
 
 // Videos originales: servimos los .mp4 recibidos por FTP
-app.use('/videos', express.static(path.join(__dirname, 'storage', 'ftp')));
+app.use('/videos', express.static(path.join(STORAGE_DIR, 'ftp')));
 
 // ============================================
 // API REST - ENDPOINTS
@@ -75,7 +81,7 @@ app.get('/api/videos', (req, res) => {
         // Añadimos URLs accesibles para cada video
         const videosWithUrls = videos.map(video => ({
             ...video,
-            original_url: `/videos/${path.relative(path.join(__dirname, 'storage', 'ftp'), video.original_path).replace(/\\/g, '/')}`,
+            original_url: `/videos/${path.relative(path.join(STORAGE_DIR, 'ftp'), video.original_path).replace(/\\/g, '/')}`,
             thumbnail_url: video.thumbnail_path ? `/processed/${path.basename(video.thumbnail_path)}` : null,
             preview_url: video.preview_path ? `/processed/${path.basename(video.preview_path)}` : null
         }));
@@ -109,7 +115,7 @@ app.get('/api/videos/:id', (req, res) => {
         // Añadimos URLs accesibles
         const videoWithUrls = {
             ...video,
-            original_url: `/videos/${path.relative(path.join(__dirname, 'storage', 'ftp'), video.original_path).replace(/\\/g, '/')}`,
+            original_url: `/videos/${path.relative(path.join(STORAGE_DIR, 'ftp'), video.original_path).replace(/\\/g, '/')}`,
             thumbnail_url: video.thumbnail_path ? `/processed/${path.basename(video.thumbnail_path)}` : null,
             preview_url: video.preview_path ? `/processed/${path.basename(video.preview_path)}` : null
         };

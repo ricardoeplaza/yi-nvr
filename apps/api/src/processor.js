@@ -23,7 +23,8 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 
 // Directorio de salida para los archivos procesados
-const PROCESSED_DIR = path.join(__dirname, 'storage', 'processed');
+const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.join(__dirname, 'storage');
+const PROCESSED_DIR = path.join(STORAGE_DIR, 'processed');
 
 // Aseguramos que el directorio de procesados exista
 if (!fs.existsSync(PROCESSED_DIR)) {
