@@ -1,18 +1,21 @@
 /**
  * server.js
- * 
+ *
  * Punto de entrada principal de la aplicación.
- * 
+ *
  * Este archivo arranca dos servicios:
  *  1. Servidor FTP (ftp.js) - Para recepción de videos desde las cámaras.
  *  2. Servidor Web Express - API REST + Frontend estático.
- * 
- * API Endpoints:
+ *
+ * API Endpoints (routers en src/routes/):
+ *  - GET /api/health          - Estado del servicio (DB + FTP)
  *  - GET /api/videos          - Lista de videos con filtros
  *  - GET /api/videos/:id      - Detalle de un video específico
- *  - GET /api/cameras         - Lista de cámaras disponibles
+ *  - DELETE /api/videos/:id   - Elimina un video y sus archivos
+ *  - GET /api/cameras         - Lista de cámaras registradas con estadísticas
+ *  - POST /api/cameras/:id/reload - Recarga cameras.json
  *  - GET /api/timeline        - Datos agregados para el timeline
- * 
+ *
  * El frontend se sirve desde /public como archivos estáticos.
  * Los videos procesados se sirven desde /storage/processed.
  */
@@ -21,10 +24,23 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '..', '..', '.env') });
 require('dotenv').config();
 
+// Cargamos el registro de cámaras ANTES de cualquier otro módulo que lo
+// use (ftp.js lo requiere). Si cameras.json es inválido al arranque,
+// salimos con código de error y un log claro.
+try {
+    require('./camera-registry');
+} catch (e) {
+    console.error('[Registry] No se pudo cargar cameras.json:', e.message);
+    process.exit(1);
+}
+
 const express = require('express');
-const fs = require('fs');
-const { startFtpServer } = require('./ftp');
-const { getVideos, getVideoById, getAllCameras, getTimelineData, deleteVideo } = require('./database');
+const { startFtpServer, isFtpListening } = require('./ftp');
+const { db } = require('./database');
+
+const videosRouter = require('./routes/videos');
+const camerasRouter = require('./routes/cameras');
+const timelineRouter = require('./routes/timeline');
 
 // Configuración
 const PORT = process.env.PORT || 3000;
@@ -53,204 +69,41 @@ app.use('/processed', express.static(path.join(STORAGE_DIR, 'processed')));
 app.use('/videos', express.static(path.join(STORAGE_DIR, 'ftp')));
 
 // ============================================
-// API REST - ENDPOINTS
+// API REST - HEALTH
 // ============================================
 
 /**
- * GET /api/videos
- * 
- * Obtiene la lista de videos con soporte para filtros.
- * Query params opcionales:
- *  - camera: Filtrar por nombre de cámara
- *  - startDate: Fecha inicio (ISO 8601)
- *  - endDate: Fecha fin (ISO 8601)
- *  - limit: Límite de resultados (default: 100)
+ * GET /api/health
+ *
+ * Estado del servicio: uptime, base de datos (SELECT 1) y servidor FTP.
+ * Si DB o FTP fallan, responde 503.
  */
-app.get('/api/videos', (req, res) => {
+app.get('/api/health', (req, res) => {
+    let dbStatus = 'ok';
     try {
-        const { camera, startDate, endDate, limit } = req.query;
-        
-        const filters = {};
-        if (camera) filters.camera = camera;
-        if (startDate) filters.startDate = startDate;
-        if (endDate) filters.endDate = endDate;
-        if (limit) filters.limit = parseInt(limit, 10);
-
-        const videos = getVideos(filters);
-        
-        // Añadimos URLs accesibles para cada video
-        const videosWithUrls = videos.map(video => ({
-            ...video,
-            original_url: `/videos/${path.relative(path.join(STORAGE_DIR, 'ftp'), video.original_path).replace(/\\/g, '/')}`,
-            thumbnail_url: video.thumbnail_path ? `/processed/${path.basename(video.thumbnail_path)}` : null,
-            preview_url: video.preview_path ? `/processed/${path.basename(video.preview_path)}` : null
-        }));
-
-        res.json({
-            success: true,
-            count: videosWithUrls.length,
-            data: videosWithUrls
-        });
-
-    } catch (error) {
-        console.error('[API] Error al obtener videos:', error.message);
-        res.status(500).json({ success: false, error: error.message });
+        db.prepare('SELECT 1').get();
+    } catch (e) {
+        dbStatus = 'error';
     }
-});
 
-/**
- * GET /api/videos/:id
- * 
- * Obtiene el detalle de un video específico por su ID.
- */
-app.get('/api/videos/:id', (req, res) => {
-    try {
-        const id = parseInt(req.params.id, 10);
-        const video = getVideoById(id);
+    const ftpStatus = isFtpListening() ? 'listening' : 'down';
+    const healthy = dbStatus === 'ok' && ftpStatus === 'listening';
 
-        if (!video) {
-            return res.status(404).json({ success: false, error: 'Video no encontrado' });
-        }
-
-        // Añadimos URLs accesibles
-        const videoWithUrls = {
-            ...video,
-            original_url: `/videos/${path.relative(path.join(STORAGE_DIR, 'ftp'), video.original_path).replace(/\\/g, '/')}`,
-            thumbnail_url: video.thumbnail_path ? `/processed/${path.basename(video.thumbnail_path)}` : null,
-            preview_url: video.preview_path ? `/processed/${path.basename(video.preview_path)}` : null
-        };
-
-        res.json({
-            success: true,
-            data: videoWithUrls
-        });
-
-    } catch (error) {
-        console.error('[API] Error al obtener video:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-/**
- * DELETE /api/videos/:id
- * 
- * Elimina un video específico por su ID.
- * También elimina los archivos físicos asociados (video original, thumbnail y preview).
- */
-app.delete('/api/videos/:id', (req, res) => {
-    try {
-        const id = parseInt(req.params.id, 10);
-        
-        // Obtenemos el video para saber qué archivos eliminar
-        const video = getVideoById(id);
-        
-        if (!video) {
-            return res.status(404).json({ success: false, error: 'Video no encontrado' });
-        }
-        
-        // Eliminamos los archivos físicos si existen
-        const filesToDelete = [
-            video.original_path,
-            video.thumbnail_path,
-            video.preview_path
-        ];
-        
-        filesToDelete.forEach(filePath => {
-            if (filePath && fs.existsSync(filePath)) {
-                try {
-                    fs.unlinkSync(filePath);
-                    console.log(`[API] Archivo eliminado: ${filePath}`);
-                } catch (err) {
-                    console.error(`[API] Error eliminando archivo ${filePath}:`, err.message);
-                }
-            }
-        });
-        
-        // Eliminamos el registro de la base de datos
-        const deleted = deleteVideo(id);
-        
-        if (deleted) {
-            res.json({
-                success: true,
-                message: 'Video eliminado correctamente'
-            });
-        } else {
-            res.status(500).json({ success: false, error: 'No se pudo eliminar el video' });
-        }
-        
-    } catch (error) {
-        console.error('[API] Error al eliminar video:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-/**
- * GET /api/cameras
- * 
- * Obtiene la lista de cámaras que han enviado videos.
- */
-app.get('/api/cameras', (req, res) => {
-    try {
-        const cameras = getAllCameras();
-        res.json({
-            success: true,
-            count: cameras.length,
-            data: cameras
-        });
-    } catch (error) {
-        console.error('[API] Error al obtener cámaras:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-/**
- * GET /api/timeline
- * 
- * Obtiene datos agregados para mostrar un timeline en el frontend.
- * Agrupa videos por fecha y cámara.
- */
-app.get('/api/timeline', (req, res) => {
-    try {
-        const timeline = getTimelineData();
-        
-        // Reorganizamos los datos para facilitar el consumo en el frontend
-        const groupedByDate = {};
-        timeline.forEach(item => {
-            if (!groupedByDate[item.date]) {
-                groupedByDate[item.date] = {
-                    date: item.date,
-                    total: 0,
-                    cameras: {}
-                };
-            }
-            groupedByDate[item.date].total += item.count;
-            groupedByDate[item.date].cameras[item.camera_name] = item.count;
-        });
-
-        res.json({
-            success: true,
-            data: Object.values(groupedByDate)
-        });
-
-    } catch (error) {
-        console.error('[API] Error al obtener timeline:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
+    res.status(healthy ? 200 : 503).json({
+        status: healthy ? 'ok' : 'error',
+        uptime: process.uptime(),
+        db: dbStatus,
+        ftp: ftpStatus
+    });
 });
 
 // ============================================
-// SPA FALLBACK
+// API REST - ROUTERS
 // ============================================
 
-// Para rutas no definidas en la API, servimos el index.html (SPA behavior)
-// app.get('*', (req, res) => {
-//     const indexPath = path.join(__dirname, 'public', 'index.html');
-//     if (fs.existsSync(indexPath)) {
-//         res.sendFile(indexPath);
-//     } else {
-//         res.status(404).send('Frontend not built. Please create public/index.html');
-//     }
-// });
+app.use('/api', videosRouter);
+app.use('/api', camerasRouter);
+app.use('/api', timelineRouter);
 
 // ============================================
 // INICIO DE SERVICIOS
@@ -260,14 +113,16 @@ async function startServices() {
     try {
         // Iniciamos el servidor FTP para recepción de videos
         await startFtpServer();
-        
+
         // Iniciamos el servidor web Express
         app.listen(PORT, HOST, () => {
             console.log(`[Server] API Web iniciada en http://${HOST}:${PORT}`);
             console.log(`[Server] Endpoints disponibles:`);
+            console.log(`         GET /api/health`);
             console.log(`         GET /api/videos`);
             console.log(`         GET /api/videos/:id`);
             console.log(`         GET /api/cameras`);
+            console.log(`         POST /api/cameras/:id/reload`);
             console.log(`         GET /api/timeline`);
         });
 

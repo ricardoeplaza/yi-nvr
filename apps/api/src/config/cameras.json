@@ -1,0 +1,20 @@
+[
+    {
+        "id": "oficina",
+        "name": "Oficina",
+        "host": "192.168.1.50",
+        "ftp_dir": "oficina",
+        "mqtt_prefix": "A4CB8XXXXXXX",
+        "rtsp_url": "rtsp://192.168.1.50:554/ch0_0.h264",
+        "capabilities": { "led": true, "ircut": true, "rec_mode": true, "power": false }
+    },
+    {
+        "id": "default",
+        "name": "Default",
+        "host": "",
+        "ftp_dir": "default",
+        "mqtt_prefix": "",
+        "rtsp_url": "",
+        "capabilities": { "led": false, "ircut": false, "rec_mode": false, "power": false }
+    }
+]

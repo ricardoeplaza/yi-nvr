@@ -134,6 +134,23 @@ function getAllCameras() {
 }
 
 /**
+ * Obtiene estadísticas por cámara (camera_name): total de videos y el
+ * timestamp del último video.
+ * @returns {Array<{camera_name: string, count: number, last_video: string}>}
+ */
+function getCameraStats() {
+    const stmt = db.prepare(`
+        SELECT
+            camera_name,
+            COUNT(*) as count,
+            MAX(timestamp) as last_video
+        FROM videos
+        GROUP BY camera_name
+    `);
+    return stmt.all();
+}
+
+/**
  * Obtiene datos agregados para el timeline (videos agrupados por día).
  * @returns {Array} - Datos agrupados por fecha
  */
@@ -181,6 +198,7 @@ module.exports = {
     getVideos,
     getVideoById,
     getAllCameras,
+    getCameraStats,
     getTimelineData,
     updateVideo,
     deleteVideo,

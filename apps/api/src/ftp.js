@@ -22,6 +22,7 @@ const path = require('path');
 const fs = require('fs');
 const { processVideo } = require('./processor');
 const { insertVideo } = require('./database');
+const { getCameraByFtpDir } = require('./camera-registry');
 
 // Configuración del servidor FTP
 const FTP_PORT = process.env.FTP_PORT || 2121;
@@ -52,6 +53,17 @@ if (process.env.FTP_PASSIVE_RANGE) {
 // Set para rastrear archivos que ya están siendo procesados
 // (evita procesamiento duplicado)
 const processingFiles = new Set();
+
+// Flag de estado del servidor FTP (true tras startFtpServer resuelto)
+let ftpListening = false;
+
+/**
+ * Indica si el servidor FTP está escuchando.
+ * @returns {boolean}
+ */
+function isFtpListening() {
+    return ftpListening;
+}
 
 // Aseguramos que el directorio FTP exista
 if (!fs.existsSync(FTP_ROOT)) {
@@ -118,6 +130,12 @@ async function handleNewVideo(filePath) {
         // Extraemos nombre de cámara del path
         const cameraName = extractCameraName(filePath);
         const timestamp = new Date().toISOString();
+
+        // Comprobamos si la cámara está registrada (la BD sigue guardando
+        // camera_name con el valor de ftp_dir; si no está, avisamos e indexamos igual)
+        if (!getCameraByFtpDir(cameraName)) {
+            console.warn('[FTP] Clip de cámara no registrada: ' + cameraName);
+        }
 
         // Procesamos el video (thumbnail + preview)
         const processedData = await processVideo(filePath);
@@ -232,6 +250,7 @@ async function startFtpServer() {
     
     try {
         await ftpServer.listen();
+        ftpListening = true;
         console.log(`[FTP] Servidor iniciado en ${FTP_HOST}:${FTP_PORT}`);
         console.log(`[FTP] Directorio raíz: ${FTP_ROOT}`);
         console.log(`[FTP] Credenciales: ${FTP_USER} / ${FTP_PASS}`);
@@ -248,6 +267,7 @@ async function startFtpServer() {
 
 module.exports = {
     startFtpServer,
+    isFtpListening,
     ftpServer,
     FTP_ROOT
 };
