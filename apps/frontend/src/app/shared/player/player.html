@@ -1,0 +1,19 @@
+<div class="player">
+  <div class="video-wrap" (click)="togglePlay()">
+    <video #videoEl playsinline muted autoplay></video>
+
+    <div class="scrim-top">
+      <div class="cam-info">
+        <h1>{{ title() }}</h1>
+        <p class="cam-status">
+          <span class="dot-rec"></span>
+          @if (liveUrl()) {
+            EN VIVO
+          } @else {
+            Grabación&nbsp;|&nbsp;{{ clipLabel() }}
+          }
+        </p>
+      </div>
+    </div>
+  </div>
+</div>

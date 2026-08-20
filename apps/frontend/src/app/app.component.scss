@@ -1,8 +1,8 @@
 .app-main {
   max-width: 480px;
   margin: 0 auto;
-  min-height: calc(100vh - 64px);
-  padding-bottom: 80px;
+  min-height: calc(100vh - var(--tab-bar-h) - env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--tab-bar-h) + env(safe-area-inset-bottom, 0px));
 }
 
 .tab-bar {
@@ -12,37 +12,35 @@
   transform: translateX(-50%);
   width: 100%;
   max-width: 480px;
-  height: 64px;
-  background: var(--card);
-  border-top: 1px solid var(--line);
+  height: calc(var(--tab-bar-h) + env(safe-area-inset-bottom, 0px));
   display: flex;
   align-items: center;
-  justify-content: space-around;
+  border-top: 1px solid var(--line);
+  background: var(--card);
   z-index: 100;
-  padding-bottom: env(safe-area-inset-bottom);
 
-  a {
+  .tab {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
-    text-decoration: none;
+    gap: 3px;
     color: var(--text-faint);
-    font-size: 0.7rem;
-    font-weight: 500;
-    transition: color 0.2s;
+    text-decoration: none;
+    transition: color 0.15s ease;
 
-    &.active {
-      color: var(--accent-blue);
-    }
-
-    .tab-icon {
-      font-size: 1.4rem;
-      line-height: 1;
+    svg {
+      width: 21px;
+      height: 21px;
     }
 
     .tab-label {
-      font-size: 0.65rem;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    &.active {
+      color: var(--accent-blue);
     }
   }
 }

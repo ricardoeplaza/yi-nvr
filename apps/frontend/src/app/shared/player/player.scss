@@ -1,0 +1,286 @@
+:host {
+  display: block;
+  flex: 0 0 auto;
+}
+
+/* ---------- PLAYER ---------- */
+.player {
+  position: relative;
+  background: #0b0b0d;
+}
+
+.video-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3.15;
+  overflow: hidden;
+  background: #0b0b0d;
+
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    background: #000;
+  }
+}
+
+.scrim-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 10px 34px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.18) 70%, transparent);
+  color: #fff;
+}
+
+.cam-info {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  padding-top: 2px;
+
+  h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cam-status {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.85);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    .dot-rec {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--red);
+      margin-right: 5px;
+      vertical-align: middle;
+      animation: pulse 1.4s infinite;
+    }
+  }
+}
+
+.scrim-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 26px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.6), transparent);
+
+  .grp {
+    display: flex;
+    gap: 6px;
+  }
+}
+
+.center-tap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+
+  svg {
+    width: 46px;
+    height: 46px;
+    color: #fff;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+    opacity: 0;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    transform: scale(0.85);
+  }
+
+  &.show svg {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.buffering {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25);
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translate(-50%, 8px);
+  background: rgba(20, 22, 26, 0.92);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 20;
+
+  &.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.live-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--red);
+  }
+
+  &.active {
+    background: #fdeceb;
+    border-color: #f8c7c3;
+    color: var(--red);
+
+    .dot {
+      animation: pulse 1.2s infinite;
+    }
+  }
+}
+
+.live-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.cam-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  width: 244px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: rgba(14, 16, 20, 0.97);
+  border-radius: var(--radius-md);
+  padding: 6px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+  z-index: 30;
+}
+
+.cam-menu-title {
+  margin: 4px 8px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.cam-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  text-align: left;
+  transition: background 0.15s ease;
+
+  &:active,
+  &.active {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .cam-thumb {
+    width: 42px;
+    height: 32px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex: 0 0 auto;
+    background: #262a31;
+  }
+
+  .cam-thumb.art {
+    background:
+      radial-gradient(circle at 25% 30%, rgba(255, 255, 255, 0.12), transparent 55%),
+      linear-gradient(135deg, #343a43, #20242b);
+  }
+
+  .cam-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cam-live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--red);
+    flex: 0 0 auto;
+    animation: pulse 1.2s infinite;
+  }
+}

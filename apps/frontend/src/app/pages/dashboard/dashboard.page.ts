@@ -1,84 +1,143 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
-import { CameraCardComponent } from '../../shared/camera-card/camera-card.component';
-import { VideoCardComponent } from '../../shared/video-card/video-card.component';
-import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
+import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { CameraService } from '../../services/camera.service';
 import { VideoService } from '../../services/video.service';
 import { Camera } from '../../models/camera.model';
 import { Video } from '../../models/video.model';
+import { Timeline } from '../../shared/timeline/timeline';
+import { Player } from '../../shared/player/player';
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
 
 @Component({
   selector: 'yi-dashboard-page',
   standalone: true,
-  imports: [CameraCardComponent, VideoCardComponent, EmptyStateComponent],
+  imports: [Timeline, Player],
   template: `
-    <div class="dashboard">
-      <header class="dash-header">
-        <h1>Yi NVR</h1>
-        <p class="dash-subtitle">
-          @if (cameras().length) {
-            {{ cameras().length }} cámara{{ cameras().length !== 1 ? 's' : '' }} conectada{{ cameras().length !== 1 ? 's' : '' }}
-          }
-        </p>
-      </header>
+    <div class="home">
+      @if (loadingCameras()) {
+        <div class="home-loading">Cargando…</div>
+      } @else if (cameras().length === 0) {
+        <div class="empty-home">
+          <div class="empty-icon">📷</div>
+          <h2>Sin cámaras</h2>
+          <p>Configura cámaras en cameras.json</p>
+        </div>
+      } @else {
+        <yi-player [video]="selectedVideo()" [title]="playerTitle()"></yi-player>
 
-      <section class="section">
-        <h2 class="section-title">Cámaras</h2>
-        @if (loadingCameras()) {
-          <div class="loading">Cargando…</div>
-        } @else if (cameras().length) {
-          <div class="camera-grid">
-            @for (cam of cameras(); track cam.id) {
-              <yi-camera-card [camera]="cam" />
-            }
-          </div>
-        } @else {
-          <yi-empty-state icon="📷" title="Sin cámaras" subtitle="Configura cámaras en cameras.json" />
-        }
-      </section>
+        <yi-timeline
+          [videos]="videos()"
+          [selectedId]="selectedVideo()?.id ?? null"
+          (videoSelect)="selectVideo($event)"
+          (rangeChange)="timelineRange.set($event)"
+        ></yi-timeline>
 
-      <section class="section">
-        <h2 class="section-title">Últimas grabaciones</h2>
-        @if (loadingVideos()) {
-          <div class="loading">Cargando…</div>
-        } @else if (videos().length) {
-          <div class="video-list">
+        <div class="events">
+          @if (videos().length === 0) {
+            <div class="empty-day">Sin videos</div>
+          } @else {
             @for (vid of videos(); track vid.id) {
-              <yi-video-card [video]="vid" />
+              <div class="ev-row" [class.active]="selectedVideo()?.id === vid.id" (click)="selectVideo(vid)" style="--ev-color:#3b82f6">
+                <div class="ev-thumb">
+                  @if (vid.thumbnail_url) {
+                    <img [src]="vid.thumbnail_url" alt="">
+                  } @else {
+                    <div class="art"></div>
+                  }
+                  <div class="play-ico"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
+                  <div class="pause-ico"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg></div>
+                </div>
+                <div class="ev-mid">
+                  <p class="ev-title">Grabación</p>
+                  <p class="ev-sub">{{ fmtVideoDate(vid) }}&nbsp;·&nbsp;<span class="ev-cam">{{ cameraNameOf(vid) }}</span></p>
+                </div>
+                <span class="ev-time">{{ fmtVideoTime(vid) }}</span>
+                <div class="ev-badge" style="--ev-color:#3b82f6">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="15.5" cy="5" r="1.8" fill="currentColor" stroke="none"/><path d="M13 8l-2.5 3 2 2.3-1 5.2M10.5 11 7 12.5l-2 4M13 8 9.7 9.5l-.2 3.3M13 8l4 1.5 2.3 3.7"/></svg>
+                </div>
+              </div>
             }
-          </div>
-        } @else {
-          <yi-empty-state icon="🎬" title="Sin grabaciones" />
-        }
-      </section>
+          }
+        </div>
+      }
     </div>
   `,
   styleUrl: './dashboard.page.scss'
 })
-export class DashboardPage implements OnInit {
+export class DashboardPage implements OnInit, OnDestroy {
   private cameraService = inject(CameraService);
   private videoService = inject(VideoService);
 
   cameras = signal<Camera[]>([]);
-  videos = signal<Video[]>([]);
   loadingCameras = signal(true);
-  loadingVideos = signal(true);
+  videos = signal<Video[]>([]);
+  selectedVideo = signal<Video | null>(null);
+  timelineRange = signal<{ from: number; to: number } | null>(null);
+
+  private camByFtp = new Map<string, Camera>();
+  private destroyed = false;
 
   ngOnInit() {
     this.cameraService.getCameras().subscribe({
       next: (res) => {
         this.cameras.set(res.data);
         this.loadingCameras.set(false);
+        if (res.data.length > 0) {
+          this.camByFtp = new Map(res.data.map(c => [c.ftp_dir, c]));
+        }
       },
       error: () => this.loadingCameras.set(false)
     });
 
-    this.videoService.getVideos({ limit: 10 }).subscribe({
+    this.videoService.getVideos({}).subscribe({
       next: (res) => {
-        this.videos.set(res.data);
-        this.loadingVideos.set(false);
+        if (this.destroyed) return;
+        this.applyDataset(res.data || []);
       },
-      error: () => this.loadingVideos.set(false)
+      error: () => {
+        if (this.destroyed) return;
+        this.applyDataset([]);
+      }
     });
   }
+
+  ngOnDestroy() {
+    this.destroyed = true;
+  }
+
+  /* ---------------- DATOS ---------------- */
+
+  private applyDataset(videos: Video[]) {
+    const sorted = [...videos].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    this.videos.set(sorted);
+  }
+
+  playerTitle(): string {
+    const v = this.selectedVideo();
+    return v ? this.cameraNameOf(v) : '';
+  }
+
+  cameraNameOf(vid: Video): string {
+    return this.camByFtp.get(vid.camera_name)?.name || vid.camera_name;
+  }
+
+  fmtVideoDate(vid: Video): string {
+    const d = new Date(vid.timestamp);
+    return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  }
+
+  fmtVideoTime(vid: Video): string {
+    const d = new Date(vid.timestamp);
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+
+  /* ---------------- REPRODUCTOR ---------------- */
+
+  selectVideo(vid: Video) {
+    if (this.destroyed) return;
+    this.selectedVideo.set(vid);
+  }
+
 }

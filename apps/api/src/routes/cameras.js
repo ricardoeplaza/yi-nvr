@@ -66,6 +66,7 @@ router.get('/cameras', (req, res) => {
                 id: cam.id,
                 name: cam.name,
                 host: cam.host,
+                ftp_dir: cam.ftp_dir,
                 capabilities: cam.capabilities,
                 has_videos: stats ? stats.count > 0 : false,
                 video_count: stats ? stats.count : 0,

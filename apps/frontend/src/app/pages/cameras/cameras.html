@@ -1,0 +1,22 @@
+<div class="cameras">
+  <header class="cameras-header">
+    <h1>Cámaras</h1>
+    @if (cameras().length) {
+      <p class="cameras-subtitle">
+        {{ cameras().length }} cámara{{ cameras().length !== 1 ? 's' : '' }} conectada{{ cameras().length !== 1 ? 's' : '' }}
+      </p>
+    }
+  </header>
+
+  @if (loading()) {
+    <div class="loading">Cargando…</div>
+  } @else if (cameras().length) {
+    <div class="camera-grid">
+      @for (cam of cameras(); track cam.id) {
+        <yi-camera-card [camera]="cam" />
+      }
+    </div>
+  } @else {
+    <yi-empty-state icon="📷" title="Sin cámaras" subtitle="Configura cámaras en cameras.json" />
+  }
+</div>

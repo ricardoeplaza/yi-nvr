@@ -1,0 +1,67 @@
+<div class="timeline-section" [attr.data-range-from]="range()?.from" [attr.data-range-to]="range()?.to">
+  <div class="date-bar">
+    <button class="date-pill" type="button" (click)="openDatePicker()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M8 3v4M16 3v4M3 10h18" />
+      </svg>
+      <span class="date-label">{{ dateLabel() }}</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M7 10l5 5 5-5z" />
+      </svg>
+      <input
+        #dateInput
+        type="date"
+        aria-label="Elegir fecha"
+        [value]="dateValue()"
+        [max]="dateMax()"
+        (change)="onDateChange($event)"
+      />
+    </button>
+  </div>
+
+  <div
+    class="timeline-wrap"
+    #timelineWrap
+    tabindex="0"
+    aria-label="Línea de tiempo de grabaciones, usa las flechas izquierda y derecha para desplazarte"
+  >
+    <div class="timeline-scroll" #timelineScroll>
+      <div class="timeline-track">
+        @for (day of days(); track day.key) {
+          <div class="day-col" [style.width.px]="day.width">
+            @for (zone of day.nightZones; track zone.left) {
+              <div class="night-zone" [style.left.px]="zone.left" [style.width.px]="zone.width"></div>
+            }
+            @for (tick of day.hourTicks; track tick.left) {
+              <div class="hour-tick" [class.major]="tick.major" [style.left.px]="tick.left"></div>
+              @if (tick.label) {
+                <div class="hour-label" [style.left.px]="tick.left">{{ tick.label }}</div>
+              }
+            }
+            @for (seg of day.segments; track seg.left) {
+              <div class="rec-seg" [style.left.px]="seg.left" [style.width.px]="seg.width"></div>
+            }
+            @if (day.nowLineLeft !== null) {
+              <div class="now-line" [style.left.px]="day.nowLineLeft"></div>
+            }
+            @for (ev of day.events; track ev.video.id) {
+              <div
+                class="ev-mark"
+                [class.selected]="ev.selected"
+                [style.left.px]="ev.left"
+                [attr.data-id]="ev.video.id"
+                [title]="ev.video.camera_name"
+              ></div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+    <div class="playhead"><div class="line"></div></div>
+  </div>
+
+  <div class="time-readout">
+    <span class="readout-time">{{ centerTime() }}</span><span class="day-label">{{ centerDayLabel() }}</span>
+  </div>
+</div>
