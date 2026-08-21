@@ -13,7 +13,6 @@
  *    'default' (ver extractCameraName en ftp.js).
  *  - mqtt_prefix: prefix MQTT yi-hack de la cámara (por defecto de fábrica:
  *    MAC sin dos puntos; personalizable, p. ej. "yi-oficina").
- *  - rtsp_url: URL RTSP para fases futuras (go2rtc / streaming).
  *  - capabilities: objeto de booleanos (led, ircut, rec_mode, power).
  *  - mqtt_topics (opcional): overrides de los suffixes de tema MQTT por
  *    cámara (birth_will, motion, motion_image, motion_files, sound_detection).
@@ -75,7 +74,7 @@ function validateCameras(data) {
         }
         seenDirs.add(cam.ftp_dir);
 
-        for (const field of ['host', 'mqtt_prefix', 'rtsp_url']) {
+        for (const field of ['host', 'mqtt_prefix']) {
             if (typeof cam[field] !== 'string') {
                 throw new Error(`cameras[${i}]: falta "${field}" (string, puede ser vacío)`);
             }

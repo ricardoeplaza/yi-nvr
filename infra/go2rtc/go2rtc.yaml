@@ -1,3 +1,0 @@
-streams:
-  oficina:
-    src: rtsp://192.168.14.30/ch0_1.h264

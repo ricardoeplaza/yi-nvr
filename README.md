@@ -27,7 +27,7 @@ The result is a single project that covers the whole job the Xiaomi ecosystem us
 - **FTP clip receiver** — motion-triggered `.mp4` uploads from yi-hack cameras, mapped to cameras via a configurable registry.
 - **Video processing** — per-clip JPG thumbnail + animated WebP preview with `ffmpeg`.
 - **MQTT control plane** — motion events in; LED, night vision (IR-cut), record mode and power commands out.
-- **Live view** — WebRTC in the browser via a `go2rtc` sidecar (HLS fallback), proxied through the same process. No plugins.
+- **Live view** — WebRTC in the browser via a `go2rtc` sidecar (MSE/mp4 fallback), proxied through the same process. No plugins.
 - **Web Push notifications** — on motion and on clip processing completion.
 - **Mobile-first PWA** — dashboard, camera controls, clip gallery, timeline, settings.
 - **Retention & bounded disk** — age-based and capacity-based cleanup policies.
@@ -56,7 +56,7 @@ yi-nvr/
 ├── .env.example
 ├── infra/
 │   ├── mosquitto/           # broker config
-│   └── go2rtc/              # generated stream config
+│   └── go2rtc/              # stream config (manual; .example template)
 ├── apps/
 │   ├── api/                 # Node.js backend (FTP, MQTT, push, REST, PWA hosting)
 │   │   └── src/
@@ -94,6 +94,15 @@ npm start
 
 The server listens on `http://localhost:3000` (HTTP API + static assets) and `2121` (FTP, passive range `1024–1050`).
 
+### Camera config (first run)
+
+```bash
+cp apps/api/src/config/cameras.json.example apps/api/src/config/cameras.json
+```
+
+- `cameras.json` is the single source of truth for the backend (LAN IPs, FTP dir, MQTT prefix/topics). It is **gitignored** — fill in your real values.
+- `infra/go2rtc/go2rtc.yaml` is **manual** (template: `infra/go2rtc/go2rtc.yaml.example` — copy it and fill in real values). It is **gitignored** and the API never writes to it. One stream per camera `id` from `cameras.json`; use the `ffmpeg:` prefix to normalize a source (e.g. H.265 → H.264). For Tuya/Smart Life cameras, put the full `tuya://` URL (device id, email, password) as a stream source.
+
 ### Docker (full stack)
 
 ```bash
@@ -116,7 +125,7 @@ Only port `3000` (HTTP) and the FTP ports are exposed; Mosquitto and go2rtc stay
 | `POST` | `/api/cameras/:id/night-vision` | Toggle IR-cut |
 | `POST` | `/api/cameras/:id/rec-mode` | `continuous` \| `motion` \| `off` |
 | `POST` | `/api/cameras/:id/power` | Power on/off |
-| `GET` | `/api/cameras/:id/stream` | WebRTC/HLS stream endpoints |
+| `GET` | `/api/cameras/:id/stream` | WebRTC/MSE stream endpoints |
 | `GET` | `/api/timeline` | Recordings grouped by date |
 | `GET` | `/api/health` | Liveness |
 | `POST` | `/api/push/subscribe` | Register a Web Push subscription |

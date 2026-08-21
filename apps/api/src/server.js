@@ -20,7 +20,7 @@
  *  - POST /api/cameras/:id/command - Comando MQTT genérico (whitelist)
  *  - POST /api/cameras/group/power - Comando MQTT a un grupo de cámaras
  *  - GET /api/timeline        - Datos agregados para el timeline
- *  - GET /api/cameras/:id/stream - URLs de streaming (WebRTC/HLS) vía go2rtc
+ *  - GET /api/cameras/:id/stream - URLs de streaming (WebRTC/MSE) vía go2rtc
  *  - GET /api/push/vapid-public-key - Clave pública VAPID (o null)
  *  - POST /api/push/subscribe - Suscribe un endpoint Web Push
  *  - POST /api/push/unsubscribe - Quita una suscripción por endpoint
@@ -52,16 +52,10 @@ try {
     process.exit(1);
 }
 
-// Generamos la configuración de go2rtc (infra/go2rtc/go2rtc.yaml) a partir
-// de cameras.json, ANTES del listen. go2rtc es opcional en dev: si falla,
-// logueamos el error pero NO tumbar el servicio.
-try {
-    const { generateGo2rtcConfig } = require('../scripts/generate-go2rtc-config');
-    generateGo2rtcConfig();
-} catch (e) {
-    console.error('[go2rtc-config] No se pudo generar go2rtc.yaml (live view deshabilitado hasta arreglarlo):', e.message);
-}
-
+// go2rtc (live view): `infra/go2rtc/go2rtc.yaml` es MANUAL (lo mantiene el
+// usuario; plantilla en infra/go2rtc/go2rtc.yaml.example, ver D17 en
+// docs/ARCHITECTURE.md). El API no lo genera ni lo toca: solo lo consume
+// go2rtc y el proxy /stream-proxy/* de abajo.
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const { startFtpServer, isFtpListening } = require('./ftp');
@@ -174,15 +168,23 @@ mqttClient.mqttEvents.on('camera-motion', ({ cameraId, eventType }) => {
 // PROXY go2rtc (live view)
 // ============================================
 
-// Proxy HTTP+WebSocket a go2rtc. Montado DESPUÉS de las rutas API y los
+// Proxy HTTP a go2rtc. Montado DESPUÉS de las rutas API y los
 // estáticos (más adelante el fallback del SPA irá después de este bloque).
 // Si go2rtc no está corriendo (caso normal en dev), las peticiones a
 // /stream-proxy/* responden 502 JSON y el proceso sigue vivo.
 const streamProxy = createProxyMiddleware({
     target: GO2RTC_URL,
     changeOrigin: true,
-    ws: true,
     on: {
+        // go2rtc devuelve Location absolutas en algunas redirecciones (p.ej.
+        // 301 a /api/stream.m3u8?src=...&mp4 con el stream aún no listo):
+        // añadimos el prefijo de montaje para que el navegador siga por el proxy.
+        proxyRes: (proxyRes) => {
+            const loc = proxyRes.headers['location'];
+            if (typeof loc === 'string' && loc.startsWith('/') && !loc.startsWith('/stream-proxy/')) {
+                proxyRes.headers['location'] = `/stream-proxy${loc}`;
+            }
+        },
         // Sustituye al error-response por defecto de http-proxy-middleware:
         // logueamos y respondemos 502 JSON.
         error: (err, req, res) => {
@@ -219,7 +221,7 @@ async function startServices() {
         await startFtpServer();
 
         // Iniciamos el servidor web Express
-        app.listen(PORT, HOST, () => {
+        const server = app.listen(PORT, HOST, () => {
             console.log(`[Server] API Web iniciada en http://${HOST}:${PORT}`);
             console.log(`[Server] Endpoints disponibles:`);
             console.log(`         GET /api/health`);

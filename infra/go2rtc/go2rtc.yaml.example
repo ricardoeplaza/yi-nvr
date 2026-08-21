@@ -1,0 +1,20 @@
+# Template — copy to go2rtc.yaml and fill in real values.
+# go2rtc.yaml is MANUAL (not generated): it is the single source of truth
+# for go2rtc streams. The API never writes to it (see D17 in
+# docs/ARCHITECTURE.md).
+#
+# Rules:
+# - One stream per camera id from apps/api/src/config/cameras.json
+#   (the id is what `GET /api/cameras/:id/stream` passes to go2rtc).
+# - A stream is a list of sources. Prefix `ffmpeg:` to normalize/transcode
+#   a source (e.g. H.265 → H.264); a plain stream name as source creates a
+#   derived/alias stream (see `tuya_camera` → `ffmpeg:tuya_rtsp`).
+# - After editing, go2rtc picks up the change on reload/restart
+#   (go2rtc WebUI at :1984 also edits this file).
+streams:
+  yihack_camera:
+    - ffmpeg:rtsp://<DEVICE_IP>/ch0_<ID_STREAM>.h264
+  tuya_rtsp:
+    - tuya://HOST?device_id=<DEVICE_ID>&email=<EMAIL>&password=<PASSWORD>
+  tuya_camera:
+    - ffmpeg:tuya_rtsp

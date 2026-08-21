@@ -61,12 +61,11 @@ yi-nvr/
 ├── .gitattributes
 ├── infra/
 │   ├── mosquitto/mosquitto.conf
-│   └── go2rtc/go2rtc.yaml
+│   └── go2rtc/go2rtc.yaml.example   # template; real go2rtc.yaml is manual + gitignored (D17)
 ├── apps/
 │   ├── api/
 │   │   ├── Dockerfile
 │   │   ├── package.json
-│   │   ├── scripts/generate-go2rtc-config.js
 │   │   └── src/
 │   │       ├── server.js          # bootstrap: config, middleware, rutas, listen
 │   │       ├── ftp.js
@@ -74,7 +73,7 @@ yi-nvr/
 │   │       ├── database.js
 │   │       ├── camera-registry.js
 │   │       ├── retention.js
-│   │       ├── config/cameras.json
+│   │       ├── config/cameras.json.example # template; real cameras.json is gitignored
 │   │       ├── mqtt/{client,topics,commands}.js
 │   │       ├── push/webpush.js
 │   │       └── routes/{videos,cameras,timeline,push,stream}.js
@@ -203,12 +202,12 @@ preparado (listener 1883, `allow_anonymous true` — Mosquitto 2 lo deniega por
 defecto —, solo red interna).
 
 ### D10 (fase 3) — go2rtc: config generado + proxy en Express
-- `apps/api/scripts/generate-go2rtc-config.js` lee `src/config/cameras.json` y
-  escribe `infra/go2rtc/go2rtc.yaml` (una entrada `streams.<id>` por cámara con
-  `rtsp_url`; sin cámaras → `streams: {}` + warning). Se ejecuta en el arranque
-  de `server.js` ANTES del `listen`, envuelto en try/catch: si falla, log de
-  error pero el servicio sigue (go2rtc es opcional en dev). El yaml se
-  commitea como ejemplo (artefacto derivado).
+- ~~`apps/api/scripts/generate-go2rtc-config.js` lee `src/config/cameras.json` y
+  escribe `infra/go2rtc/go2rtc.yaml`...~~ **SUPERSEDIDO por D17** (solo la
+  parte del generador): el generador se ejecutaba en el arranque de `server.js`
+  ANTES del `listen` y **sobrescribía el yaml que funcionaba** con sintaxis
+  `src:` que go2rtc no acepta. El yaml es ahora manual (D17). El proxy
+  `/stream-proxy/*` de abajo sigue en pie.
 - El proxy `/stream-proxy/*` usa `http-proxy-middleware` (v4) con
   `target: GO2RTC_URL` (env, default `http://go2rtc:1984`), `changeOrigin: true`
   y `ws: true` (WebRTC = WebSocket). Se monta DESPUÉS de las rutas API y los
@@ -218,15 +217,25 @@ defecto —, solo red interna).
   unreachable"}`. El middleware además llama a `next(err)`, así que hay un
   error-handler de Express (tras el proxy) que traga el error si la respuesta
   ya fue enviada. Con go2rtc caído, el proceso sigue vivo.
+- **Location rewrite**: go2rtc devuelve `Location` absolutas en algunas
+  redirecciones (p.ej. 301 a `/api/stream.m3u8?src=<id>&mp4` cuando el stream
+  aún no está listo). El proxy reescribe en `on: { proxyRes }` añadiendo el
+  prefijo `/stream-proxy` a cualquier Location absoluta, para que el navegador
+  siga resolviendo dentro del proxy (sin esto, el navegador saltaba a
+  `:4200/api/...` → 404).
 - `GET /api/cameras/:id/stream` devuelve URLs relativas del proxy
-  (`/stream-proxy/api/ws?src=<id>`, `/stream-proxy/<id>.m3u8`): el navegador
-  solo habla con el puerto 3000.
+  (`/stream-proxy/api/ws?src=<id>`, `/stream-proxy/api/stream.mp4?src=<id>`):
+  el navegador solo habla con el puerto 3000. El fallback de reproducción es
+  el endpoint MSE de go2rtc (`/api/stream.mp4?src=<id>`), que funciona en VLC
+  y en `<video>` nativo; se descartó el HLS (`/api/stream.m3u8?src=<id>`)
+  porque VLC no lo reproducía de forma fiable (ni directo ni por proxy).
+  Nota: no existe `/<id>.m3u8` en go2rtc (daría 404).
 
 ### D11 (fase 3) — go2rtc nativo en Windows (dev) + go2rtc integrado en yi-hack
 - **Dev nativo** (sin Docker): con `go2rtc.exe` descargado
   (https://github.com/AlexxIT/go2rtc/releases), arrancar
-  `go2rtc.exe -config infra/go2rtc/go2rtc.yaml` (el yaml lo genera el API en
-  el arranque) y dejar `GO2RTC_URL=http://127.0.0.1:1984` en el `.env` local.
+  `go2rtc.exe -config infra/go2rtc/go2rtc.yaml` (el yaml es manual, D17) y
+  dejar `GO2RTC_URL=http://127.0.0.1:1984` en el `.env` local.
   go2rtc escucha por defecto en `127.0.0.1:1984`.
 - **Alternativa SBC** (corregido tras analizar el repo del firmware
   `roleoroleo/yi-hack-Allwinner-v2`, ver D13): el campo
@@ -282,14 +291,15 @@ codificado (nadie transcodifica):
     --audio ... --apply`) `RTSP_ALT`/`RTSP_AUDIO` vía los CGIs de la cámara
     (`set_configs.sh?conf=system` + `service.sh?name=rtsp&action=stop|start`)
     y re-sincroniza `cameras.json`. Sin `--apply` es dry-run.
-  - `generate-go2rtc-config.js`: emite `audio: true` en el stream si la
-    cámara declara audio (la cámara solo emite AAC).
+   - ~~`generate-go2rtc-config.js`: emite `audio: true` en el stream si la
+     cámara declara audio (la cámara solo emite AAC)~~ — script eliminado en
+     D17; el audio se gestiona directamente en `go2rtc.yaml` (manual).
 
 ### D14 (fase 3) — Benchmark CPU de RTSP_ALT: justificación del programa RTSP elegido
 
 Justificación empírica de la decisión D13. Ante afirmaciones encontradas
 (sobre todo marketing a favor de `go2rtc`), se mide en la cámara real
-(`oficina`, 192.168.14.30, yi-hack-allwinner-v2 0.3.6, chip Allwinner) qué
+(`oficina`, <CAMERA_IP>, yi-hack-allwinner-v2 0.3.6, chip Allwinner) qué
 programa RTSP consume menos CPU/RAM bajo la misma carga.
 
 **Protocolo de prueba** (manual, desde la PC):
@@ -302,9 +312,9 @@ programa RTSP consume menos CPU/RAM bajo la misma carga.
   1. Aplicar: `node scripts/set-camera-rtsp.js --camera oficina --alt <opcion> --audio no --apply`
      (desde `apps/api`). Esperar 60 s de estabilización.
   2. **Baseline sin consumidor**: 3 lecturas (~20 s entre ellas) de
-     `curl.exe http://192.168.14.30/cgi-bin/status.json` → `load_avg`, `free_memory`.
+     `curl.exe http://<CAMERA_IP>/cgi-bin/status.json` → `load_avg`, `free_memory`.
   3. Arrancar consumidor (5 min):
-     `ffmpeg -rtsp_transport tcp -i rtsp://192.168.14.30/ch0_1.h264 -f null - 2> ffmpeg-<opcion>.log`
+     `ffmpeg -rtsp_transport tcp -i rtsp://<CAMERA_IP>/ch0_1.h264 -f null - 2> ffmpeg-<opcion>.log`
   4. Mientras corre, 3–5 lecturas de `status.json` (`load_avg`, `free_memory`)
      y, si hay SSH en la cámara (usuario `root`),
      `top -b -n 2 -d 1 | grep -E "rRTSPServer|go2rtc|h264grabber|rtsp_server_yi"`
@@ -369,3 +379,159 @@ programa RTSP consume menos CPU/RAM bajo la misma carga.
   permiso del usuario, prueba con endpoint FCM real) queda pendiente de la
   fase 5 (frontend). En esta fase se verifica el fan-out HTTP contra
   endpoints falsos (2xx/404/410) y el trigger MQTT de movimiento.
+
+### D16 (fase 5) — Live view: WebRTC (WHEP) como primaria, MSE real (MediaSource) como fallback automático
+- **Fuente primaria**: WebRTC por WHEP — `StreamService.startWebRtc` contra
+  `/stream-proxy/api/webrtc?src=<id>` (ver handshake abajo). Funciona fuera
+  de la LAN sin STUN/TURN y el handshake ya está construido en el propio
+  frontend (estado reactivo incluido). Cubre iOS Safari (que NO soporta
+  MediaSource).
+- **Fallback automático (MSE real)**: si el handshake WHEP lanza excepción
+  (o el `<video>` emite `error`) o no llega el evento `playing` en ~10 s, el
+  `Player` cierra la `RTCPeerConnection` y monta **MSE de verdad** contra
+  `mse_url` (`/stream-proxy/api/stream.mp4?src=<id>`): `fetch` (con
+  `AbortController`) → bucle `reader` sobre el cuerpo MP4 fragmentado
+  (ftyp → moov → moof/mdat) → `MediaSource` + `SourceBuffer` con
+  `video.src = URL.createObjectURL(ms)` (no `srcObject`). El contentType del
+  `SourceBuffer` NO está hardcoded: go2rtc anuncia el codec exacto en el
+  `Content-Type` de la respuesta (`video/mp4; codecs="avc1.640029"` para
+  H.264, `codecs="hvc1.1.6.L153.B0"` para H.265) y se usa tal cual tras
+  `MediaSource.isTypeSupported()`. Replica el algoritmo MSE de la UI de
+  go2rtc (`video-rtc.js`): `sb.mode='segments'`, ventana de ~5 s con
+  `setLiveSeekableRange` y catch-up por `playbackRate` (autoconverge a
+  velocidad real con ~1 s de latencia). Un solo intento (flag
+  `liveFallbackTried`); si también falla, estado `error`.
+- **HLS eliminado**: el fallback anterior era hls.js contra
+  `/stream-proxy/api/stream.m3u8`. Según "codecs madness" de go2rtc, HLS es
+  la peor tecnología para live (latencia alta, formato legacy TS sin audio)
+  y solo quedaba como opción legacy para iPhones viejos (≤14); ya no es el
+  objetivo. MSE cubre H.264/H.265 en Chrome/Edge/Firefox y WebRTC (la
+  primaria) cubre iOS Safari. Dependencia hls.js eliminada del frontend.
+- **Handshake WebRTC por WHEP (HTTP)**: `POST /stream-proxy/api/webrtc?src=<id>`
+  con el offer en texto plano (`Content-Type: application/sdp`) → respuesta =
+  answer en texto plano. Dos requisitos no negociables: (a) el offer se genera
+  con `addTransceiver('video'|'audio', {direction:'recvonly'})` — sin
+  transceivers explícitos `createOffer()` no emite líneas `m=` y go2rtc no
+  tiene nada que negociar; (b) el offer se envía **después** de que termine el
+  ICE gathering local (timeout 3 s) porque WHEP no soporta trickle ICE.
+  El endpoint WebSocket `/api/ws` de go2rtc se descartó: formato de mensajes
+  opaco (JSON) y el lazy-upgrade de http-proxy-middleware lo hacían más
+  frágil que un POST simple que ya atraviesa los dos proxies sin config extra.
+- **Estado reactivo**: `Player.liveStatus` (output signal
+  `'idle' | 'loading' | 'playing' | 'error'`); la página de detalle de
+  cámara muestra texto mínimo ("Cargando…" / "Error de stream").
+- **Razón de la estrategia**: las cámaras se ven sobre todo fuera de la LAN;
+  WebRTC pasa por el proxy Express (puerto 3000) sin infraestructura
+  STUN/TURN, y MSE es la red de seguridad que también atraviesa la cadena de
+  proxies sin config extra (GET con cuerpo chunked). H.265 + WebRTC falla en
+  algunos navegadores; MSE es la segunda mejor opción según "codecs madness"
+  de go2rtc.
+- **Limpieza**: al destruir el `Player` o cambiar de fuente se limpian
+  `srcObject`/`src`, se hace `close()` de la `RTCPeerConnection` abierta
+  (por eso `startWebRtc` la devuelve), se aborta el `fetch` MSE
+  (`AbortController`), `endOfStream()` de la `MediaSource` y
+  `URL.revokeObjectURL()` del object URL.
+
+### D17 (fase 3) — go2rtc.yaml manual: se elimina el generador (veredicto A sobre A/B)
+
+Ante la divergencia entre el generador automático y el `go2rtc.yaml` real que
+funciona, se plantearon dos opciones: **A** (yaml manual + `cameras.json`
+simplificado, generador eliminado) y **B** (generador que reproduce el formato
+real: `cameras.json` como única verdad, con sintaxis inventada para wrappers
+`ffmpeg:` y streams derivados). **Gana A**, por evidencia:
+
+- **Bug activo confirmado**: `server.js` ejecutaba
+  `scripts/generate-go2rtc-config.js` en el arranque (antes del `listen`), así
+  que cada restart del API sobrescribía el yaml que funcionaba. Además la
+  sintaxis emitida (`streams.<id>.src:`) **no es válida en go2rtc**: según la
+  doc oficial, un stream es una cadena o una **lista de fuentes** (p. ej.
+  `- ffmpeg:rtsp://...`); no existe la clave `src:`. El generador producía
+  config rota por diseño.
+- **`rtsp_url` no lo lee nadie en el backend**: el registro usa `id`, `name`,
+  `host`, `ftp_dir`, `mqtt_prefix`, `mqtt_topics`, `mqtt_messages`,
+  `capabilities`. `rtsp_url` solo la consumía el generador (y `rtsp.{alt,audio}`
+  lo usa `scripts/set-camera-rtsp.js` como registro del programa RTSP de la
+  cámara — se conserva). Eliminar `rtsp_url` de `cameras.json` es honesto: no
+  era dato del backend.
+- **El yaml contiene conocimiento que no deriva de cámaras**: `mirilla_h265`
+  (fuente tuya H.265 cruda) + `mirilla` (alias derivado `- ffmpeg:mirilla_h265`
+  que normaliza el stream) no corresponden 1:1 con entradas de
+  `cameras.json`; el canal real de `oficina` es `ch0_0` (el json decía
+  `ch0_1`). El yaml era la verdad de facto; B habría que inventar en
+  `cameras.json` la sintaxis go2rtc (nombres de streams intermedios, wrappers),
+  acoplando el registro de cámaras al formato interno de go2rtc.
+- **Mantenimiento (una persona, cámaras caseras)**: con A cada fichero vive en
+  su sitio natural — `cameras.json` = datos del backend (FTP/MQTT),
+  `go2rtc.yaml` = configuración go2rtc (editable a mano o desde la WebUI de
+  go2rtc en `:1984`, sin reiniciar el API). La única invariantes se documenta:
+  **un stream por `id` de cámara** (es el `src` que usa
+  `GET /api/cameras/:id/stream`).
+
+Cambios: se elimina `scripts/generate-go2rtc-config.js` y su wiring en
+`server.js`; `cameras.json` (+`.example`) pierde `rtsp_url` (y la validación de
+`camera-registry.js` deja de exigirla); `go2rtc.yaml.example` pasa a ser
+plantilla manual con las reglas (wrapper `ffmpeg:`, alias derivados); se limpia
+`GO2RTC_CONFIG_PATH` de `.env.example`/`docker-compose.yml` (el `api` ya no
+monta `./infra/go2rtc`; el servicio `go2rtc` sigue esperando a que el yaml
+exista). El `go2rtc.yaml` real no se toca: era (y sigue siendo) la verdad.
+
+## Notas durante el desarrollo (live view)
+
+Historial de la depuración del stream en vivo, para que no caiga en el
+olvido. Se probó de todo durante muchas horas antes de que funcionara; el
+orden de los hallazgos importa:
+
+1. **`ws: true` de http-proxy-middleware (v4) no basta para upgrades**: el
+   listener de `upgrade` se registra de forma perezosa (solo tras la primera
+   petición HTTP) y, sobre todo, el evento `upgrade` de Express **no pasa por
+   el routing**: el prefijo de mount `/stream-proxy` no se corta de
+   `req.url`, así que go2rtc recibía `/stream-proxy/api/ws` → 404 → close
+   1006. Solución: handler explícito `server.on('upgrade')` en `server.js`
+   que corta el prefijo y delega en `streamProxy.upgrade(req, socket, head)`.
+2. **Formato del endpoint WS de go2rtc**: espera SDP crudo, no JSON
+   (verificado black-box: un JSON malformado lo ignora en silencio, un SDP
+   inválido lo cierra). Aun así el WS se descartó a favor de WHEP (D16).
+3. **El offer sin `addTransceiver` no lleva líneas `m=`**: sin transceivers
+   explícitos `createOffer()` genera un SDP sin secciones de media; go2rtc
+   recibe la señalización pero no tiene nada que ofrecer de vuelta. Síntoma
+   idéntico al de un proxy roto → se perdió tiempo distinguiendo ambos.
+4. **El bug final (el que hizo funcionar todo)**: en
+   `camera-detail.page.ts` el binding era `[liveFallbackWsUrl]` pero el input
+   que el `Player` consume se llama `liveFallbackWhepUrl` → la URL WHEP
+   **nunca llegaba al player** y el fallback moría en silencio. En la misma
+   página: mp4 hardcodeado a `localhost:1984` (sin pasar por el proxy) y uso
+   del campo `ws_url` en vez de `webrtc_url`. Corregido: binding + signal
+   renombrados, `info.mse_url` e `info.webrtc_url` del API.
+5. **Verificación black-box del WHEP**: `POST /api/webrtc?src=oficina` con
+   un SDP de prueba devuelve 500 `payload type not found` (no 404) tanto
+   directo a go2rtc (1984) como vía la cadena Vite→Express (3000) → el
+   endpoint existe y el POST con body cruza los dos proxies sin config extra
+   (el `Content-Type: application/sdp` no lo toca `express.json()`).
+6. **Alternativa considerada y descartada**: el componente `video-rtc.js`
+   de go2rtc (elemento `<video-stream src="..." mode="webrtc,mse">`) resuelve
+   todo el handshake por nosotros. Descartado porque acopla el frontend a un
+    script externo servido desde el puerto 1984 y a la API de go2rtc, y el
+    handshake propio (WHEP + estado reactivo del `Player`) ya estaba
+    construido. Si en el futuro mantener el handshake propio pesa, esa es la
+    vía de escape de una línea.
+7. **Cambio de estrategia (D16)**: la primaria pasó de mp4/MSE a WebRTC
+   (WHEP) y el fallback de WHEP a HLS con hls.js, porque el endpoint
+   mp4/MSE de go2rtc no reproduce de forma fiable en el navegador sin su
+   librería propia. HLS verificado black-box: `GET /api/stream.m3u8?src=oficina`
+   → 200 (master → media playlist → `segment.ts` 200).
+8. **Cambio de estrategia (D16, segunda ronda)**: el fallback pasó de HLS a
+   **MSE real (MediaSource API)**, porque H.265 + WebRTC falla en algunos
+   navegadores y según "codecs madness" de go2rtc la segunda mejor opción es
+   MSE (HLS quedaba solo como legacy para iPhones viejos ≤14). Lección del
+   intento anterior: apuntar `<video src>` al endpoint mp4 **NO es MSE** —
+   es progressive download de un archivo que nunca termina y el navegador no
+   lo reproduce. MSE real exige `MediaSource` + `SourceBuffer` alimentado con
+   `fetch` + `reader`. Verificado black-box: la UI de go2rtc (`video-rtc.js`)
+   alimenta ese `SourceBuffer` con los frames binarios del WebSocket
+   `/api/ws` (negociando el codec por JSON); el endpoint HTTP
+   `GET /api/stream.mp4?src=oficina` → 200 `video/mp4; codecs="avc1.640029"`
+   y `src=mirilla_h265` → 200 `video/mp4; codecs="hvc1.1.6.L153.B0"`: el
+   codec exacto viene en el `Content-Type`, así que no hace falta parsear el
+   moov. Limpieza asociada: se eliminó el handler `server.on('upgrade')` de
+   `server.js`, el campo `ws_url` de la API, y el `ws: true` del proxy de
+   Vite — WHEP es un POST HTTP normal y no necesita upgrades.

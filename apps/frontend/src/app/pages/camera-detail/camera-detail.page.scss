@@ -3,6 +3,18 @@
   background: var(--bg);
 }
 
+.live-status {
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+
+  &.error {
+    color: var(--red, #e5484d);
+  }
+}
+
 
 
 .controls-section, .cam-info-section {

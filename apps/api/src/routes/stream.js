@@ -4,7 +4,7 @@
  * Router de la API para el live view (se monta en /api).
  *
  * Endpoints:
- *  - GET /cameras/:id/stream - URLs de streaming (WebRTC + HLS) vía go2rtc
+ *  - GET /cameras/:id/stream - URLs de streaming (WebRTC + MSE) vía go2rtc
  *
  * Las URLs devueltas son RELATIVAS al proxy /stream-proxy (go2rtc proxied
  * dentro de Express), de modo que el navegador habla siempre con el puerto
@@ -20,7 +20,7 @@ const router = express.Router();
  * GET /api/cameras/:id/stream
  *
  * Si la cámara existe en el registry:
- *   200 {success, src, ws_url, hls_url}
+ *   200 {success, src, webrtc_url, mse_url}
  * Si no existe:
  *   404 {success:false, error}
  */
@@ -36,8 +36,8 @@ router.get('/cameras/:id/stream', (req, res) => {
     res.json({
         success: true,
         src: camera.id,
-        ws_url: `/stream-proxy/api/ws?src=${camera.id}`,
-        hls_url: `/stream-proxy/${camera.id}.m3u8`
+        webrtc_url: `/stream-proxy/api/webrtc?src=${camera.id}`,
+        mse_url: `/stream-proxy/api/stream.mp4?src=${camera.id}`
     });
 });
 

@@ -66,7 +66,7 @@ const stub = http.createServer((req, res) => {
             oficina: {
                 id: 'oficina',
                 kind: 'webrtc',
-                url: 'rtsp://192.168.14.30/ch0_1.h264',
+                url: 'rtsp://192.168.1.50:554/ch0_1.h264',
                 modes: ['webrtc', 'mse', 'hls', 'mp4', 'rec']
             }
         }));

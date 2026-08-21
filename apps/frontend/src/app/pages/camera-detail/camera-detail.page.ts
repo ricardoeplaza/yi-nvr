@@ -3,7 +3,7 @@ import { ActivatedRoute } from '@angular/router';
 import { CameraService } from '../../services/camera.service';
 import { StreamService } from '../../services/stream.service';
 import { Camera } from '../../models/camera.model';
-import { Player } from '../../shared/player/player';
+import { Player, PlayerLiveStatus } from '../../shared/player/player';
 
 @Component({
   selector: 'yi-camera-detail-page',
@@ -11,7 +11,18 @@ import { Player } from '../../shared/player/player';
   imports: [Player],
   template: `
     <div class="cam-detail">
-      <yi-player [title]="camera()?.name || ''" [liveUrl]="liveUrl()"></yi-player>
+      <yi-player
+        [title]="camera()?.name || ''"
+        [liveUrl]="liveUrl()"
+        [liveFallbackMseUrl]="liveFallbackMseUrl()"
+        (liveStatus)="onLiveStatusChange($event)"
+      ></yi-player>
+
+      @if (liveStatus() === 'loading') {
+        <p class="live-status">Cargando…</p>
+      } @else if (liveStatus() === 'error') {
+        <p class="live-status error">Error de stream</p>
+      }
 
       @if (camera()) {
         <div class="controls-section">
@@ -69,6 +80,8 @@ export class CameraDetailPage implements OnInit {
 
   camera = signal<Camera | null>(null);
   liveUrl = signal<string | null>(null);
+  liveFallbackMseUrl = signal<string | null>(null);
+  liveStatus = signal<PlayerLiveStatus>('idle');
   powerOn = signal(false);
   ledOn = signal(false);
   nightVision = signal(false);
@@ -95,12 +108,18 @@ export class CameraDetailPage implements OnInit {
   private loadStream() {
     this.streamService.getStreamInfo(this.cameraId).subscribe({
       next: (info) => {
-        if (info.success && info.ws_url) {
-          this.liveUrl.set(info.ws_url);
+        // Primario: WebRTC/WHEP (webrtc_url); fallback automático: MSE (mse_url).
+        if (info.success && info.webrtc_url) {
+          this.liveUrl.set(info.webrtc_url);
+          this.liveFallbackMseUrl.set(info.mse_url || null);
         }
       },
       error: () => {}
     });
+  }
+
+  onLiveStatusChange(status: PlayerLiveStatus) {
+    this.liveStatus.set(status);
   }
 
   togglePower() {

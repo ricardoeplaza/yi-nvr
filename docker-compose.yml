@@ -9,12 +9,10 @@ services:
       - "1024-1050:1024-1050"
     volumes:
       - ./storage:/app/storage
-      - ./infra/go2rtc:/go2rtc-cfg
     environment:
       - STORAGE_DIR=/app/storage
       - MQTT_BROKER_URL=mqtt://mosquitto:1883
       - GO2RTC_URL=http://go2rtc:1984
-      - GO2RTC_CONFIG_PATH=/go2rtc-cfg/go2rtc.yaml
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - API_AUTH_TOKEN=${API_AUTH_TOKEN}

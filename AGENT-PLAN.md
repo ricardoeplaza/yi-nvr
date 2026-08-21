@@ -85,13 +85,11 @@ yi-nvr/
 ├── .gitattributes
 ├── infra/
 │   ├── mosquitto/mosquitto.conf
-│   └── go2rtc/go2rtc.yaml         # generated, also committed as template
+│   └── go2rtc/go2rtc.yaml.example # template; real go2rtc.yaml is manual + gitignored (D17)
 ├── apps/
 │   ├── api/
 │   │   ├── Dockerfile
 │   │   ├── package.json
-│   │   ├── scripts/
-│   │   │   └── generate-go2rtc-config.js
 │   │   └── src/
 │   │       ├── server.js          # bootstrap only: config, middleware, routes mount, listen
 │   │       ├── ftp.js             # kept
@@ -170,7 +168,8 @@ Tasks:
    ```
    - `ftp_dir` is the subdirectory under the FTP root the camera uploads to (maps uploads → camera id).
    - `mqtt_prefix` is the yi-hack camera id (MAC without colons).
-   - Seed it with the cameras that exist in the current data (`oficina` and a `default` entry for root-level clips).
+    - Seed it with the cameras that exist in the current data (`oficina` and a `default` entry for root-level clips).
+    - The real `cameras.json` is gitignored (LAN IPs / credentials); commit `cameras.json.example` with placeholders instead.
 3. Create `src/camera-registry.js`: loads + validates the JSON at startup (manual validation, no extra deps: required fields, unique ids, valid JSON — a malformed file must log a clear error and exit non-zero, NOT crash silently mid-request), exposes `getAllCameras()`, `getCameraById(id)`, `getCameraByFtpDir(dir)`, `reload()`.
 4. Wire the FTP pipeline: when a clip arrives, resolve the camera via `ftp_dir`; store `camera_name` in the DB as today (the `ftp_dir` value) — **no DB schema change**.
 5. Extend `GET /api/cameras` to return the registry merged with DB facts:
@@ -225,17 +224,11 @@ Tasks:
 **Goal:** live camera feed in the browser, no plugins, via WebRTC through go2rtc, proxied by Express.
 
 Tasks:
-1. `apps/api/scripts/generate-go2rtc-config.js`: reads `cameras.json`, writes `infra/go2rtc/go2rtc.yaml`:
-   ```yaml
-   streams:
-     oficina:
-       src: rtsp://192.168.1.50:554/ch0_0.h264
-   ```
-   Run it: (a) from the api at startup (before listen), (b) manually via `node scripts/generate-go2rtc-config.js`. Commit a sample `go2rtc.yaml`.
+1. ~~`apps/api/scripts/generate-go2rtc-config.js`: reads `cameras.json`, writes `infra/go2rtc/go2rtc.yaml`~~ — **SUPERSEDED (D17, docs/ARCHITECTURE.md)**: the generator was deleted. It ran at API startup and overwrote the working `go2rtc.yaml` with `src:` syntax that go2rtc does not accept (a stream is a string or a list of sources; there is no `src:` key), and the real yaml carries go2rtc-specific knowledge (per-source `ffmpeg:` wrappers, derived alias streams) that does not derive from `cameras.json`. `go2rtc.yaml` is now **manual**: commit `go2rtc.yaml.example` as the template; the real `go2rtc.yaml` (like `cameras.json`) is gitignored — see root `.gitignore`. Stream names must match camera `id`s in `cameras.json`.
 2. Compose: `go2rtc` service (`alexxit/go2rtc`), config volume `./infra/go2rtc:/config`. Its entrypoint must wait for `go2rtc.yaml` to exist (small shell loop) to avoid the startup race with `api`.
 3. `routes/stream.js`:
-   - `GET /api/cameras/:id/stream` → `{success, src: <id>, ws_url: "/stream-proxy/api/ws?src=<id>", hls_url: "/stream-proxy/<id>.m3u8"}` (HLS as documented fallback).
-   - `app.use('/stream-proxy', createProxyMiddleware({ target: GO2RTC_URL, changeOrigin: true, ws: true }))` registered **before** the SPA fallback.
+    - `GET /api/cameras/:id/stream` → `{success, src: <id>, webrtc_url: "/stream-proxy/api/webrtc?src=<id>", mse_url: "/stream-proxy/api/stream.mp4?src=<id>"}` (WHEP primary, MSE/mp4 fallback).
+    - `app.use('/stream-proxy', createProxyMiddleware({ target: GO2RTC_URL, changeOrigin: true }))` registered **before** the SPA fallback (no `ws: true` — WHEP is a plain HTTP POST).
 4. Dev on Windows: go2rtc ships a Windows binary — for local dev, document in `docs/ARCHITECTURE.md` how to run it natively (`go2rtc.exe -config infra/go2rtc/go2rtc.yaml`) and point `GO2RTC_URL=http://127.0.0.1:1984`. If it cannot run in the dev environment, mark WebRTC playback `DEFERRED-TO-INTEGRATION`; the proxy + API endpoints must still be verified (proxy to a stub or to the native binary).
 
 **Acceptance criteria:**
@@ -288,7 +281,7 @@ Tasks:
    - `ApiService` (base URL `/api`, bearer token from `AuthService`, error normalization)
    - `CameraService`, `VideoService`, `TimelineService`
    - `PushService` (VAPID fetch, `PushManager.subscribe` with `applicationServerKey`, registers `/push-sw.js`, subscribe/unsubscribe calls)
-   - `StreamService` (native `RTCPeerConnection` against `ws_url` from `GET /api/cameras/:id/stream`; expose a reactive "playing/error" state; fall back to `<video src="<hls_url>">` hint on WebRTC failure — full HLS.js integration is out of scope, the fallback just surfaces the message)
+    - `StreamService` (live view from `GET /api/cameras/:id/stream`; expose a reactive "playing/error" state; **primary = WebRTC via WHEP** — `POST` the raw offer SDP to `webrtc_url` (`Content-Type: application/sdp`), recvonly `addTransceiver`, wait for ICE gathering without trickle, play the answer SDP on a native `RTCPeerConnection`; **fallback = MSE** with the MediaSource API against `mse_url` (fetch + reader loop, SourceBuffer from the go2rtc `Content-Type`, segments mode, 5 s window with catch-up). No WebSocket, no HLS.js)
    - `AuthService` (stores the bearer token in `localStorage`; login page is a single field that sets the token — no user model, single-user system)
 4. Routes/pages:
    - `/login` (token)
@@ -376,7 +369,7 @@ Tasks:
          - ./infra/go2rtc:/config
        restart: unless-stopped
    ```
-   - `api` must generate `go2rtc.yaml` into the shared `./infra/go2rtc` volume at startup (adjust the generator's output path via env `GO2RTC_CONFIG_PATH`, default `infra/go2rtc/go2rtc.yaml`).
+    - ~~`api` must generate `go2rtc.yaml` into the shared `./infra/go2rtc` volume at startup~~ — **SUPERSEDED (D17)**: `go2rtc.yaml` is manual; `api` no longer mounts `./infra/go2rtc` nor sets `GO2RTC_CONFIG_PATH`. The `go2rtc` service still waits for the (user-provided) `go2rtc.yaml` to exist.
    - mosquitto and go2rtc publish **no** host ports.
 3. `server.js`:
    - Serve `apps/api/public` (the Angular build in Docker; in dev this dir is absent → static middleware just 404s, fine).
@@ -493,7 +486,6 @@ MQTT_BROKER_URL=mqtt://mosquitto:1883
 
 # go2rtc
 GO2RTC_URL=http://go2rtc:1984
-GO2RTC_CONFIG_PATH=infra/go2rtc/go2rtc.yaml
 
 # Web Push (generate: npx web-push generate-vapid-keys — NEVER commit real keys)
 VAPID_PUBLIC_KEY=
@@ -523,11 +515,11 @@ STORAGE_MAX_GB=10
 | 512 MB SBC cannot run full stack | Light mode (no local go2rtc), systemd plan B, measured budgets documented in phase 9 |
 | yi-hack MQTT suffixes vary by firmware | Per-camera `mqtt_suffixes` override in `cameras.json`; defaults in `mqtt/topics.js` |
 | `better-sqlite3` native build on ARM | Toolchain in Dockerfile; build with buildx for the target platform |
-| WebRTC fails across VPN (no STUN) | go2rtc host candidates work on LAN/tailnet; documented HLS fallback message; `[SBC]` verification |
+| WebRTC fails across VPN (no STUN) | go2rtc host candidates work on LAN/tailnet; documented MSE fallback message; `[SBC]` verification |
 | ffmpeg missing in container (original plan bug) | Explicit `apt-get install ffmpeg` in Dockerfile + container-level test in phase 6 |
 | Unbounded disk growth (original plan gap) | Dual retention policy (age + capacity), phase 7 |
 | Windows↔Linux path/line-ending bugs | `.gitattributes eol=lf`, `path.join` only, no hardcoded separators, cross-check in `[INTEG]` |
-| go2rtc/api startup race over shared config | go2rtc entrypoint waits for `go2rtc.yaml` |
+| go2rtc/api startup race over shared config | go2rtc entrypoint waits for `go2rtc.yaml` (manual file, D17 — no longer generated by api) |
 
 ## 10. Cross-platform pitfalls (Windows dev → Linux prod)
 
