@@ -7,6 +7,13 @@
 .player {
   position: relative;
   background: #0b0b0d;
+
+  &:fullscreen {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: #000;
+  }
 }
 
 .video-wrap {
@@ -15,6 +22,13 @@
   aspect-ratio: 4 / 3.15;
   overflow: hidden;
   background: #0b0b0d;
+  cursor: pointer;
+
+  // En fullscreen el contenedor ocupa todo el alto disponible.
+  .player:fullscreen & {
+    aspect-ratio: auto;
+    height: 100%;
+  }
 
   video {
     width: 100%;
@@ -25,17 +39,20 @@
   }
 }
 
+/* ---------- SCRIM SUPERIOR ---------- */
 .scrim-top {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  padding: calc(10px + env(safe-area-inset-top, 0px)) 10px 34px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 30px;
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.18) 70%, transparent);
+  // Degradado suave hacia transparente para integrarse con el video (sin blur).
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.16) 65%, transparent);
   color: #fff;
+  pointer-events: none;
 }
 
 .cam-info {
@@ -47,17 +64,18 @@
   h1 {
     margin: 0;
     font-size: 15px;
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: 0.1px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
   }
 
   .cam-status {
     margin: 2px 0 0;
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(255, 255, 255, 0.8);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -70,28 +88,14 @@
       background: var(--red);
       margin-right: 5px;
       vertical-align: middle;
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
       animation: pulse 1.4s infinite;
     }
   }
 }
 
-.scrim-bottom {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 26px 12px calc(10px + env(safe-area-inset-bottom, 0px));
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  background: linear-gradient(0deg, rgba(0, 0, 0, 0.6), transparent);
-
-  .grp {
-    display: flex;
-    gap: 6px;
-  }
-}
-
+/* ---------- ESTADO IDLE / PAUSA (centro) ---------- */
+.idle-icon,
 .center-tap {
   position: absolute;
   inset: 0;
@@ -101,21 +105,22 @@
   pointer-events: none;
 
   svg {
-    width: 46px;
-    height: 46px;
+    width: 52px;
+    height: 52px;
     color: #fff;
-    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
-    opacity: 0;
-    transition: opacity 0.25s ease, transform 0.25s ease;
-    transform: scale(0.85);
-  }
-
-  &.show svg {
-    opacity: 1;
-    transform: scale(1);
+    filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.6));
   }
 }
 
+.center-tap {
+  svg {
+    width: 64px;
+    height: 64px;
+    opacity: 0.92;
+  }
+}
+
+/* ---------- BUFFERING ---------- */
 .buffering {
   position: absolute;
   inset: 0;
@@ -123,6 +128,7 @@
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.25);
+  pointer-events: none;
 
   &[hidden] {
     display: none;
@@ -133,9 +139,221 @@
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: rgba(255, 255, 255, 0.95);
   animation: spin 0.8s linear infinite;
+}
+
+/* ---------- BARRA DE CONTROLES ---------- */
+.controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  // Barra compacta: poco aire arriba, el degradado da el contraste.
+  padding: 12px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.3) 45%, rgba(0, 0, 0, 0.52));
+  color: #fff;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+
+  &.hide {
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+  }
+}
+
+/* fila de seek (solo bajo demanda) */
+.seek-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.time-label {
+  flex: 0 0 auto;
+  min-width: 38px;
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+
+  &:last-child {
+    text-align: right;
+  }
+}
+
+/* Seekbar fina tipo cristal: track delgado, relleno con brillo suave y
+   thumb pequeño. El área táctil (16px) es mayor que la barra visible (3px). */
+.seek-bar {
+  position: relative;
+  flex: 1;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+
+  // Track: hilo fino de baja opacidad.
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.16);
+    transition: background 0.2s ease;
+  }
+
+  &:hover::before {
+    background: rgba(255, 255, 255, 0.28);
+  }
+
+  .seek-fill {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 3px;
+    border-radius: 2px;
+    // Degradado suave con un leve brillo lateral.
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.9));
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.25);
+    pointer-events: none;
+  }
+
+  .seek-thumb {
+    position: absolute;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+    transition: width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  &:hover .seek-thumb {
+    width: 12px;
+    height: 12px;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5), 0 0 8px rgba(255, 255, 255, 0.3);
+  }
+}
+
+.controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.grp {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Botones sin fondo: solo se ve el SVG. El área de toque (36px) es invisible;
+   el feedback de hover/focus es un leve aumento de opacidad del icono. */
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+
+  svg {
+    width: 20px;
+    height: 20px;
+    opacity: 0.8;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+
+  &:hover svg {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+
+  &:active svg {
+    opacity: 0.7;
+    transform: scale(0.97);
+  }
+
+  &:focus-visible {
+    outline: 1px solid rgba(255, 255, 255, 0.35);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  // Favorito activo: icono relleno con el color de acento (estado lo da el
+  // input isFavorite del padre; aquí solo se refleja).
+  &.fav-active {
+    color: var(--accent-blue);
+
+    svg {
+      opacity: 1;
+    }
+  }
+}
+
+/* volumen: botón + slider */
+.vol-grp {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.vol-slider {
+  width: 72px;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  accent-color: #fff;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+
+  &::-moz-range-thumb {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
 }
 
 @keyframes spin {
@@ -145,142 +363,11 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
     opacity: 0.25;
-  }
-}
-
-.toast {
-  position: absolute;
-  left: 50%;
-  bottom: 14px;
-  transform: translate(-50%, 8px);
-  background: rgba(20, 22, 26, 0.92);
-  color: #fff;
-  font-size: 12.5px;
-  font-weight: 500;
-  padding: 8px 14px;
-  border-radius: 999px;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  z-index: 20;
-
-  &.show {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
-}
-
-.live-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  transition: background 0.15s ease, border-color 0.15s ease;
-
-  .dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--red);
-  }
-
-  &.active {
-    background: #fdeceb;
-    border-color: #f8c7c3;
-    color: var(--red);
-
-    .dot {
-      animation: pulse 1.2s infinite;
-    }
-  }
-}
-
-.live-wrap {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.cam-menu {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  right: 0;
-  width: 244px;
-  max-height: 280px;
-  overflow-y: auto;
-  background: rgba(14, 16, 20, 0.97);
-  border-radius: var(--radius-md);
-  padding: 6px;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
-  z-index: 30;
-}
-
-.cam-menu-title {
-  margin: 4px 8px 6px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.cam-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 7px 8px;
-  border-radius: var(--radius-sm);
-  color: #fff;
-  text-align: left;
-  transition: background 0.15s ease;
-
-  &:active,
-  &.active {
-    background: rgba(255, 255, 255, 0.12);
-  }
-
-  .cam-thumb {
-    width: 42px;
-    height: 32px;
-    border-radius: 6px;
-    object-fit: cover;
-    flex: 0 0 auto;
-    background: #262a31;
-  }
-
-  .cam-thumb.art {
-    background:
-      radial-gradient(circle at 25% 30%, rgba(255, 255, 255, 0.12), transparent 55%),
-      linear-gradient(135deg, #343a43, #20242b);
-  }
-
-  .cam-name {
-    flex: 1;
-    min-width: 0;
-    font-size: 13px;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .cam-live-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--red);
-    flex: 0 0 auto;
-    animation: pulse 1.2s infinite;
   }
 }
