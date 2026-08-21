@@ -4,7 +4,7 @@
 
 **Rules of engagement:**
 1. Do not start phase N+1 until every acceptance criterion of phase N passes (or is explicitly marked `DEFERRED-TO-INTEGRATION` / `DEFERRED-TO-SBC` with a note in `docs/ARCHITECTURE.md`).
-2. Commit at the end of each phase with message `feat(phase-N): <summary>` and create git tag `phase-N`.
+2. Commit at the end of each phase with message `feat(phase-N): <summary>` and create git tag `phase-N`. The `phase-N` scope is **reserved for phase-closing commits**; incremental improvements on top of a finished skeleton follow the commit style guide in `docs/ARCHITECTURE.md` (D18): `feat(yi-<module>): <summary>`.
 3. Low-impact ambiguities: pick the simplest reversible option, document it in `docs/ARCHITECTURE.md` under "Decisions", and make it configurable. Do not block.
 4. Never introduce nginx, Apache, Caddy, or any additional web server. All proxying happens inside the Express process.
 5. Never rewrite the working FTP / processor / database logic. Refactor structure only.

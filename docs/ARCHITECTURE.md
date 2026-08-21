@@ -475,6 +475,35 @@ plantilla manual con las reglas (wrapper `ffmpeg:`, alias derivados); se limpia
 monta `./infra/go2rtc`; el servicio `go2rtc` sigue esperando a que el yaml
 exista). El `go2rtc.yaml` real no se toca: era (y sigue siendo) la verdad.
 
+### D18 (fase 5) — Guía de estilo de commits
+
+La regla 2 de AGENT-PLAN.md (`feat(phase-N)`) está pensada para el *cierre* de
+una fase. Una vez montado el esqueleto (fases 0–5), el trabajo real son
+mejoras incrementales sobre él (player, galería, dashboard…); etiquetarlas
+todas como `feat(phase-N)` resultaba engorroso y poco descriptivo. Convención
+adoptada:
+
+**Formato:** `tipo(scope): resumen` (resumen en inglés, imperativo, ≤ 72 cols, sin punto final)
+
+- **`tipo`**: `feat`, `fix`, `refactor`, `docs`, `chore`, `test` (conventional commits).
+- **`scope`**:
+  - `phase-N` → **solo** cuando el commit cierra la fase N de AGENT-PLAN.md
+    (todos los criterios de aceptación pasan o están marcados DEFERRED). Ese
+    commit lleva también el tag `phase-N` (regla 2 de AGENT-PLAN.md).
+  - `yi-<módulo>` → mejoras incrementales sobre el esqueleto. Módulos:
+    `yi-player` (reproductor), `yi-gallery` (galería /videos), `yi-dashboard`,
+    `yi-timeline`, `yi-camera` (detalle de cámara), `yi-live` (streaming
+    WebRTC/MSE), `yi-push`, `yi-api` (backend). Si el cambio toca varios
+    módulos, usar el más afectado o `yi-app`.
+- **Resumen**: qué, no por qué (el *porqué* va en el cuerpo, opcional).
+- **Reglas**:
+  - Un commit por unidad de trabajo coherente; no mezclar `refactor` con `feat`.
+  - Nunca secretos ni datos de `storage/` (ya gitignored).
+  - Ejemplos:
+    - `feat(yi-player): full control bar (seek, volume, download, favorite, snapshot, fullscreen), idle/paused states, muted by default`
+    - `fix(yi-gallery): pagination resets when filters change`
+    - `feat(phase-6): docker packaging, compose, integration check`
+
 ## Notas durante el desarrollo (live view)
 
 Historial de la depuración del stream en vivo, para que no caiga en el
