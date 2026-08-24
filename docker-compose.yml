@@ -11,6 +11,10 @@ services:
       - ./storage:/app/storage
     environment:
       - STORAGE_DIR=/app/storage
+      - FFMPEG_CONCURRENCY=${FFMPEG_CONCURRENCY:-1}
+      - FFMPEG_THREADS=${FFMPEG_THREADS:-2}
+      - PREVIEW_SECONDS=${PREVIEW_SECONDS:-4}
+      - PREVIEW_FPS=${PREVIEW_FPS:-6}
       - MQTT_BROKER_URL=mqtt://mosquitto:1883
       - GO2RTC_URL=http://go2rtc:1984
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
