@@ -10,7 +10,9 @@
  * con FFmpeg y guardamos los metadatos en SQLite.
  * 
  * Configuración:
- *  - Puerto: 2121 (por defecto, configurable)
+ *  - Puerto: 21 (por defecto — el puerto que hardcodea ftppush.sh de la
+ *    cámara; configurable vía FTP_PORT). 21 < 1024 es puerto privilegiado:
+ *    el bind requiere root/admin o CAP_NET_BIND_SERVICE.
  *  - Modo pasivo: Habilitado para soportar NAT/firewalls
  *  - Autenticación: Simple (usuario/contraseña configurables)
  *  - Directorio raíz: src/storage/ftp (donde se depositan los videos)
@@ -20,13 +22,14 @@ const FtpSrv = require('ftp-srv');
 const chokidar = require('chokidar');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { processVideo } = require('./processor');
-const { insertVideo } = require('./database');
+const { insertVideo, getCameraSetting } = require('./database');
 const { getCameraByFtpDir } = require('./camera-registry');
 const webpush = require('./push/webpush');
 
 // Configuración del servidor FTP
-const FTP_PORT = process.env.FTP_PORT || 2121;
+const FTP_PORT = process.env.FTP_PORT || 21;
 const FTP_HOST = process.env.FTP_HOST || '0.0.0.0';
 const FTP_USER = process.env.FTP_USER || 'camera';
 const FTP_PASS = process.env.FTP_PASS || 'surveillance123';
@@ -64,6 +67,52 @@ let ftpListening = false;
  */
 function isFtpListening() {
     return ftpListening;
+}
+
+/**
+ * Resuelve la IP LAN del NVR a la que las cámaras pueden llegar.
+ * Criterio (en orden):
+ *  1. Env NVR_PUBLIC_IP (override explícito; p. ej. NVR multi-homed, NAT
+ *     o DMZ donde la IP auto-detectada no es la que ven las cámaras).
+ *  2. Primera IPv4 no-internal de os.networkInterfaces() (excluye loopback
+ *     e IPv6). En un NVR con una sola interfaz LAN es la IP de la LAN.
+ *  3. Fallback 127.0.0.1 (solo útil si cámara y NVR comparten host).
+ * @returns {string}
+ */
+function getNvrPublicIp() {
+    const fromEnv = (process.env.NVR_PUBLIC_IP || '').trim();
+    if (fromEnv) {
+        return fromEnv;
+    }
+    const ifaces = os.networkInterfaces();
+    for (const name of Object.keys(ifaces)) {
+        for (const iface of ifaces[name] || []) {
+            if (iface.internal || iface.family !== 'IPv4') continue;
+            return iface.address;
+        }
+    }
+    return '127.0.0.1';
+}
+
+/**
+ * Config FTP derivada que el NVR impone a la cámara: los parámetros de
+ * push NO son libres (ver §12.4 de docs/CAMERA-CGI-REFERENCE.md):
+ *  - FTP_HOST     = IP LAN del NVR (a la que la cámara puede llegar)
+ *  - FTP_USERNAME = usuario del ftp-srv (env FTP_USER)
+ *  - FTP_PASSWORD = contraseña del ftp-srv (env FTP_PASS)
+ *  - FTP_DIR      = ftp_dir de la cámara (cameras.json; en la BD
+ *                   videos.camera_name = ftp_dir, así el NVR sabe de qué
+ *                   cámara es cada clip)
+ * @param {string} ftpDir - ftp_dir de la cámara
+ * @returns {{FTP_HOST: string, FTP_USERNAME: string, FTP_PASSWORD: string, FTP_DIR: string}}
+ */
+function getFtpSuggestedConfig(ftpDir) {
+    return {
+        FTP_HOST: getNvrPublicIp(),
+        FTP_USERNAME: FTP_USER,
+        FTP_PASSWORD: FTP_PASS,
+        FTP_DIR: ftpDir
+    };
 }
 
 // Aseguramos que el directorio FTP exista
@@ -157,6 +206,11 @@ async function handleNewVideo(filePath) {
         // Notificación push del clip procesado (fase 4). notify() nunca lanza,
         // pero lo envolvemos igualmente para que el fallo (si apareciera) no
         // rompa el pipeline de indexación del clip.
+        // Toggle de push por cámara (camera_settings; default: activado).
+        const pushCamera = getCameraByFtpDir(cameraName);
+        if (pushCamera && !getCameraSetting(pushCamera.id).push_enabled) {
+            return;
+        }
         try {
             const thumbnailUrl = videoRecord.thumbnail_path
                 ? `/processed/${path.basename(videoRecord.thumbnail_path)}`
@@ -278,6 +332,14 @@ async function startFtpServer() {
         
         return ftpServer;
     } catch (err) {
+        if (err.code === 'EACCES' || err.code === 'EPERM') {
+            console.error(`[FTP] El puerto ${FTP_PORT} es privilegiado (< 1024): el bind requiere permisos de administrador.`);
+            console.error('[FTP] Linux: corre el API como root o con CAP_NET_BIND_SERVICE (setcap "cap_net_bind_service=+ep" $(which node)).');
+            console.error('[FTP] Windows: ejecuta el API como administrador.');
+            console.error('[FTP] Alternativa: usa un puerto no privilegiado (FTP_PORT en .env) y parchea ftppush.sh en la SD de la cámara (docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md §5.2.1).');
+        } else if (err.code === 'EADDRINUSE') {
+            console.error(`[FTP] El puerto ${FTP_PORT} ya está en uso: libera el puerto o cambia FTP_PORT en .env.`);
+        }
         console.error('[FTP] Error al iniciar servidor:', err.message);
         throw err;
     }
@@ -286,6 +348,8 @@ async function startFtpServer() {
 module.exports = {
     startFtpServer,
     isFtpListening,
+    getNvrPublicIp,
+    getFtpSuggestedConfig,
     ftpServer,
     FTP_ROOT
 };

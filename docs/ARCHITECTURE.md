@@ -251,7 +251,7 @@ defecto —, solo red interna).
   del repo consumiendo RTSP :554 de la cámara.
 
 ### D12 (fase 3) — Criterios [INTEG]/[SBC] del live view: DEFERRED
-- `[INTEG]` compose completo con solo puertos 3000/2121/1024-1050 publicados
+- `[INTEG]` compose completo con solo puertos 3000/21/1024-1050 publicados
   al host: **DEFERRED-TO-INTEGRATION** (verificar en la fase de integración
   contra el stack Docker real; `docker-compose.yml` ya lo define así).
  - `[INTEG]`/`[SBC]` reproducción WebRTC real en navegador (stream en vivo):
@@ -503,6 +503,195 @@ adoptada:
     - `feat(yi-player): full control bar (seek, volume, download, favorite, snapshot, fullscreen), idle/paused states, muted by default`
     - `fix(yi-gallery): pagination resets when filters change`
     - `feat(phase-6): docker packaging, compose, integration check`
+
+### D19 (yi-camera/yi-api) — Multi-ecosistema: campo `ecosystem` + contrato de estado unificado
+
+El NVR puede registrar cámaras que no son yi-hack (p. ej. Tuya): suben clips por
+FTP pero no responden a consultas HTTP/MQTT.
+
+- **`cameras.json`**: nuevo campo `ecosystem` por cámara: `"yi-hack"` (se le puede
+  consultar TODO por HTTP/MQTT) o `"generic"` (el NVR SOLO indexa sus clips por
+  FTP; NO se le consulta ni envía nada). Default si falta: `"generic"` (seguro:
+  nunca se consulta a una cámara que no sabe responder; una yi-hack debe marcarse
+  SIEMPRE explícitamente). Otro valor → error de validación.
+- **Contrato unificado** (`GET /api/cameras/:id/status`): mismas claves para ambos
+  ecosistemas; lo no disponible es SIEMPRE `null` (nunca ausente) y el objeto
+  `capabilities` (`live_status`, `controls`, `sd`, `wifi`, `system`, `mqtt`,
+  `push`, `videos`) dice al frontend qué secciones renderizar sin hardcodear el
+  ecosistema. yi-hack: todos `true`; generic: solo `push` y `videos` (estado del
+  NVR, no del dispositivo).
+- **Controles**: reboot/httpd y todos los controles MQTT (`routes/cameras.js`)
+  devuelven 409 (`UNSUPPORTED_ECOSYSTEM`) para `generic`; `POST /cameras/:id/push`
+  funciona en ambos (es estado del NVR, tabla `camera_settings`).
+- **Metadata de las genéricas**: solo lo que el NVR ya indexó — tabla `videos`
+  (enlace `ftp_dir` = `camera_name`), `camera_settings` (push) y `mqtt_events`
+  (eventos, si los publica). Detalle en `docs/CAMERA-CGI-REFERENCE.md` §11.
+- Frontend: `camera-detail` adaptativo por `capabilities`; badge de ecosistema en
+  `camera-card`.
+
+### D20 (yi-storage/yi-api) — Gestión de almacenamiento (SD): proxy de eventos + purge por alcance
+
+Gestión de la SD de una cámara yi-hack (listado de eventos, borrado, purge,
+push FTP). El firmware yi-hack expone CGIs de eventos (`eventsdir.sh`,
+`eventsdirdel.sh`, `eventsfiledel.sh`, §12 de
+`docs/CAMERA-CGI-REFERENCE.md`) pero su validación está rota
+(`eventsdirdel.sh`), así que el NVR hace de proxy y sanitiza estrictamente:
+
+- **Backend** (`routes/storage.js`, montado en `/api`): 6 endpoints —
+  `GET /cameras/:id/storage` (SD + directorios), `DELETE .../storage/files`,
+  `DELETE .../storage/dirs`, `POST .../storage/purge` (scope `all`/`last`/
+  `range`, borrado secuencial con retardo 500 ms), `GET/POST .../storage/ftp`
+  (claves `FTP_*` de `system.conf`; `requires_reboot` si cambia `FTP_UPLOAD`).
+  SOLO yi-hack (generic → 409). Nombres validados por regex antes de tocar la
+  SD (directorios: 14 chars `YYYY Y MM M DD D HH H`; rutas
+  `<dir>/<file>.mp4|.jpg` sin `..`).
+- **Frontend** (`pages/storage-management/`, ruta `cameras/:id/storage`):
+  listado ordenado por fecha, borrado con confirmación, purge por alcance con
+  confirmación por texto en el alcance total, formulario FTP con aviso de
+  reboot. El frontend nunca conoce la IP de la cámara.
+- La cabecera de `routes/storage.js` es el contrato documentado; el modelo
+  TypeScript (`storage.model.ts`) y el service lo reflejan 1:1.
+
+### D21 (yi-storage/yi-api) — Push FTP: parámetros fijos auto-derivados del NVR
+
+Los parámetros de push de la cámara no son libres: el NVR es quien recibe
+los clips, así que él determina `FTP_HOST` (su IP LAN),
+`FTP_USERNAME`/`FTP_PASSWORD` (las del ftp-srv) y `FTP_DIR` (el `ftp_dir`
+de la cámara, que es `videos.camera_name` en la BD). Ver §12.4-12.6 de
+`docs/CAMERA-CGI-REFERENCE.md`.
+
+- **IP del NVR** (`getNvrPublicIp()` en `ftp.js`): env opcional
+  `NVR_PUBLIC_IP` → primera IPv4 no-internal de `os.networkInterfaces()`
+  (excluye loopback/IPv6) → fallback `127.0.0.1`. El override existe para
+  NVRs multi-homed / NAT / DMZ.
+- **Backend** (`routes/storage.js`): `GET .../storage/ftp` devuelve
+  `suggested` (los 4 derivados) + `in_sync` (¿los fijos actuales de la
+  cámara coinciden?). `POST .../storage/ftp` acepta SOLO switches
+  (`FTP_UPLOAD`, `FTP_DIR_TREE`, `FTP_FILE_DELETE_AFTER_UPLOAD`,
+  `"yes"`/`"no"`); los fijos SIEMPRE se escriben con los derivados
+  (el POST es auto-reparador; el frontend no los envía y lo que llegue se
+  ignora).
+- **Frontend** (`pages/storage-management/`): host/usuario/contraseña/
+  carpeta en SOLO LECTURA (etiqueta «Configurado por el NVR»); editables
+  solo los switches; aviso visible si `in_sync` es false.
+- **Hallazgo del firmware** (`ftppush.sh`): el puerto de subida es SIEMPRE
+  21 (hardcodeado, sin clave de puerto) → el NVR escucha en 21 por defecto
+  (D25).
+
+### D22 (yi-storage/yi-api) — Listado de eventos: timeout 30 s + cache 60 s + ficheros bajo demanda
+
+`eventsdir.sh` tarda ~13 s en la cámara real (el firmware ejecuta `ls -r` +
+`date -d @...` por cada uno de los ~95 directorios, en ARM lento). El
+timeout genérico de 5 s del proxy abortaba el fetch → `dirs: null` → la UI
+mostraba «Sin directorios de eventos». Ver §12.2/§12.5 de
+`docs/CAMERA-CGI-REFERENCE.md`.
+
+- **Timeout por endpoint**: `EVENTSDIR_TIMEOUT_MS = 30000` solo para
+  `eventsdir.sh` (`fetchCameraJson` acepta timeout por llamada); el resto del
+  proxy sigue con 5 s.
+- **Cache del listado** por cámara: TTL 60 s (`DIRS_CACHE_TTL_MS`); se
+  invalida tras `DELETE .../storage/dirs` (solo los directorios borrados) y
+  tras `purge` (scope `all` limpia toda la cache). Segunda llamada: ~0,6 s.
+- **Parseo del formato real**: `eventsdir.sh` devuelve
+  `{"records":[{"datetime","dirname"}]}` (no un array plano);
+  `parseEventsDir()` lo normaliza.
+- **Ficheros bajo demanda**: nuevo endpoint
+  `GET /cameras/:id/storage/dirs/:dir/files` (proxy de `eventsfile.sh`,
+  ~0,5 s); la UI los carga al expandir la fila del directorio (acordeón, una
+  abierta a la vez) en vez de incluirlos en la carga inicial.
+- **Frontend**: borrado de directorio/fichero y purge actualizan el estado
+  local (señales) en vez de refetchear el listado (~13 s).
+- Medido en vivo (192.168.14.30, 98 directorios): frío 13,5 s → cache
+  0,6 s; `/dirs/:dir/files` 0,6 s.
+
+### D23 (yi-storage/yi-api) — 502 en POST config FTP: timeout 15 s para set_configs + error del CGI
+
+`set_configs.sh` hace un `sed -i` por clave (7 claves = 7 reescrituras de
+`system.conf` en la SD). En reposo tarda ~1,5 s, pero con la SD ocupada
+(grabación, o un purge en curso — caso típico: el usuario está en la página
+de almacenamiento) puede superar el timeout genérico de 5 s →
+`AbortSignal.timeout` → 502 «cámara no alcanzable» (falso). Verificado en
+vivo contra la cámara: el formato de body (JSON en una línea, como espera el
+firmware) y la respuesta (`{"error":"false"}`, JSON) son correctos; curl
+directo 1,47 s, vía API 1,39 s, HTTP 200.
+
+- **Timeout por endpoint**: `SET_CONFIGS_TIMEOUT_MS = 15000` solo para
+  `POST .../storage/ftp` (mismo patrón que D22).
+- **Error del CGI respetado**: el handler comprueba `data.error === 'true'`
+  (el CGI rechazó la escritura) y devuelve 502 «la cámara rechazó la
+  configuración» en vez de `success: true` silencioso.
+- **Frontend (purge)**: el select de alcance se reduce a 3 opciones de
+  retención («De más de un día / 1 semana / 30 días»); todas usan
+  `from = época, to = ahora - N` (borrar lo anterior, nunca los últimos N).
+  Se eliminan «Última hora» y «Todo» (y el panel de confirmación por texto
+  «BORRAR»).
+
+### D24 (yi-hack SD) — Análisis de la SD (v0.3.6, y211ga): ajustes fuera de la Web UI
+
+Investigación completa de la **copia fría** de la SD de una cámara `y211ga`
+con `yi-hack-allwinner-v2` v0.3.6 (lectura solo; la copia no se toca). El
+resultado es `docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md` (referencia de todo lo
+modificable en la SD: layout, arranque, config, puertos, hooks, cloud,
+riesgos). Hallazgos:
+
+- **Arranque**: `lower_half_init.sh` (nivel SD, sustituye al OEM) →
+  `system.sh` (servicios) → `startup.sh` (hook de usuario, último, primer
+  plano). Hooks disponibles sin tocar la Web UI: `/tmp/sd/debug.sh`
+  (`lower_half_init.sh:208`), `startup.sh` (`system.sh:481`), key `CRONTAB`
+  (`system.sh:394`), bind-mounts + `LD_PRELOAD=ipc_multiplex.so`
+  (`lower_half_init.sh:184-196`), y `Factory/factory_test.sh` (activa modo
+  fábrica — no crear salvo intención).
+- **Config**: 63 keys en `etc/system.conf` (RTSP/HTTP/ONVIF/FTP/MQTT/NTP/
+  red/SD), 15 en `etc/camera.conf` (detección), `etc/mqttv4.conf` (broker
+  MQTT embebido, puerto 1883). La mayoría requiere reinicio.
+- **Puertos configurables**: solo `RTSP_PORT` (554) y `HTTPD_PORT` (80) y
+  `MQTT_PORT` (1883). Hardcodeados: SSH 22 (`system.sh:318`), FTPD 21
+  (`service.sh:388`), ONVIF WSDD UDP 3702, mDNS UDP 5353.
+- **Cloud**: `DISABLE_CLOUD=yes` → `cloudAPI_fake` (JSON falsos + NTP) y
+  `blacklist/url`+`blacklist/ip` (sinkhole DNS + `route reject`) cortan la
+  telemetría de Xiaomi/Yi sin tocar el firmware.
+- **Push FTP (hallazgo clave, verificado con fuente de busybox 1.36.1)**:
+  `ftppush.sh` empuja SIEMPRE a puerto **21** (4 sitios: `nc -w 5
+  ${FTP_HOST} 21` ×2 para `mkd`, y `ftpput` sin `-P` ×2). La fuente
+   (`ftpgetput.c:290-338`) confirma que `ftpput` solo acepta puerto vía `-P`
+   (default 21, sin `HOST:PORT`) y `nc` no soporta `host:port`. Por eso el NVR
+   escucha en 21 por defecto (D25). Puerto alternativo: parchear `ftppush.sh`
+   en la SD (4 sitios, ver `docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md` §5.2.1).
+- **Riesgos**: no tocar `/home` (MTD/OEM), no crear `Factory/factory_test.sh`,
+  no borrar `etc/dropbear/` (clave SSH), `sed -i` por clave en `system.conf`
+  (ver D23). El `startup.sh` de esta copia referencia 3 scripts que NO existen
+   (`watch_motion.sh`, `watch_sound.sh`, `telegram_control.sh`) y termina en un
+   `while true; do done` (busy-wait que quema un núcleo; mejor `sleep 1`).
+
+### D25 (yi-api) — Puerto FTP por defecto: 21 (el puerto que hardcodea la cámara)
+
+El push FTP de la cámara va SIEMPRE a puerto 21 (hallazgo D24, verificado
+con fuente de busybox 1.36.1). Para que la configuración funcione
+out-of-the-box sin tocar el firmware ni hacer forwards de puerto, **el NVR
+escucha en 21 por defecto**:
+
+- `apps/api/src/ftp.js`: `FTP_PORT = process.env.FTP_PORT || 21` (el env
+  `FTP_PORT` sigue siendo el override).
+- `.env.example` → `FTP_PORT=21` (con la advertencia de puerto privilegiado).
+- `docker-compose.yml` → `21:21` (en el container el proceso ya es root).
+
+**Puerto privilegiado** (21 < 1024): el bind requiere permisos.
+
+- Linux: correr el API como root o con `CAP_NET_BIND_SERVICE`
+  (`setcap "cap_net_bind_service=+ep" $(which node)`).
+- Windows: ejecutar el API como administrador.
+- Docker: sin cambios (el proceso del container corre como root).
+
+`startFtpServer` loguea un error claro si el bind falla
+(`EACCES`/`EPERM` → opciones de permisos + referencia al parche de
+`ftppush.sh`; `EADDRINUSE` → puerto ocupado) y el API sale con código 1.
+
+**Puerto alternativo** (si en producción se prefiere un puerto no
+privilegiado): parchear `ftppush.sh` en la SD de la cámara en sus 4 sitios
+(2× `nc -w 5 ${FTP_HOST} 21` y 2× `ftpput` sin `-P`; líneas exactas y
+ejemplo en `docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md` §5.2.1) + `FTP_PORT` en
+el NVR. Opción más limpia a largo plazo: key `FTP_PORT` en `system.conf` +
+`ftppush.sh` que la lea (cambiable desde la Web UI).
 
 ## Notas durante el desarrollo (live view)
 

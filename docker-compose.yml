@@ -5,7 +5,7 @@ services:
       dockerfile: apps/api/Dockerfile
     ports:
       - "3000:3000"
-      - "2121:2121"
+      - "21:21"
       - "1024-1050:1024-1050"
     volumes:
       - ./storage:/app/storage

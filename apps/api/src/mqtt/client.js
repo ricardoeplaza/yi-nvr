@@ -77,6 +77,58 @@ function prefixOf(topic) {
     return topic.split('/')[0];
 }
 
+// Estado MQTT por cámara (en memoria). Se alimenta de los mensajes
+// birth/will (online/offline) y del feedback stat/camera/<cmd>.
+// - cameraMqttState: cameraId → { online: boolean, lastSeen: ISO|null }
+// - cameraCommandState: cameraId → { <cmd>: <payload> } (último estado
+//   re-publicado por la cámara, p. ej. { led: "yes", ircut: "no" })
+const cameraMqttState = new Map();
+const cameraCommandState = new Map();
+
+/**
+ * Actualiza el estado MQTT de una cámara a partir de un mensaje recibido.
+ * @param {string} cameraId
+ * @param {string} eventType
+ * @param {string} payload
+ * @param {string} receivedAt
+ */
+function trackMqttState(cameraId, eventType, payload, receivedAt) {
+    const entry = cameraMqttState.get(cameraId) || { online: false, lastSeen: null };
+    entry.lastSeen = receivedAt;
+    if (eventType === 'online') entry.online = true;
+    else if (eventType === 'offline') entry.online = false;
+    cameraMqttState.set(cameraId, entry);
+
+    if (eventType.startsWith('stat:')) {
+        const cmd = eventType.slice('stat:'.length);
+        let cmds = cameraCommandState.get(cameraId);
+        if (!cmds) {
+            cmds = {};
+            cameraCommandState.set(cameraId, cmds);
+        }
+        cmds[cmd] = payload;
+    }
+}
+
+/**
+ * Estado online/offline (birth/will) de una cámara.
+ * @param {string} cameraId
+ * @returns {{online: boolean, lastSeen: string|null}|null} - null si aún no
+ *   se ha recibido ningún mensaje de esa cámara
+ */
+function getCameraMqttState(cameraId) {
+    return cameraMqttState.get(cameraId) || null;
+}
+
+/**
+ * Último estado de comandos re-publicado por la cámara (feedback stat).
+ * @param {string} cameraId
+ * @returns {Object<string, string>|null} - null si no hay feedback aún
+ */
+function getCameraCommandState(cameraId) {
+    return cameraCommandState.get(cameraId) || null;
+}
+
 /**
  * Calcula los temas de entrada a suscribir para todas las cámaras.
  * @returns {{topics: string[], byPrefix: Map<string, string>}} - Lista de
@@ -132,6 +184,9 @@ function onMessage(topic, payload) {
 
     console.log(`[MQTT] ${receivedAt} ${camera ? camera.id : '<desconocida>'} ${eventType} ${topic}=${JSON.stringify(text)}`);
     recordEvent(camera ? camera.id : null, eventType, text);
+    if (camera) {
+        trackMqttState(camera.id, eventType, text, receivedAt);
+    }
 
     if (camera && MOTION_EVENT_TYPES.has(eventType)) {
         mqttEvents.emit('camera-motion', {
@@ -274,5 +329,7 @@ module.exports = {
     publish,
     isConnected: () => connected,
     getStatus,
-    syncSubscriptions
+    syncSubscriptions,
+    getCameraMqttState,
+    getCameraCommandState
 };

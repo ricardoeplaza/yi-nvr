@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { Camera } from '../models/camera.model';
+import { Camera, CameraStatus } from '../models/camera.model';
 
 export interface CommandResult {
   success: boolean;
@@ -40,7 +40,19 @@ export class CameraService {
     });
   }
 
-  reloadCamera(cameraId: string): Observable<{ success: boolean }> {
-    return this.http.post<{ success: boolean }>(`/api/cameras/${cameraId}/reload`, {});
+  getCameraStatus(cameraId: string): Observable<{ success: boolean; data: CameraStatus }> {
+    return this.http.get<{ success: boolean; data: CameraStatus }>(`/api/cameras/${cameraId}/status`);
+  }
+
+  rebootCamera(cameraId: string): Observable<{ success: boolean; rebooted: boolean }> {
+    return this.http.post<{ success: boolean; rebooted: boolean }>(`/api/cameras/${cameraId}/reboot`, {});
+  }
+
+  setHttpd(cameraId: string, enabled: boolean): Observable<{ success: boolean; httpd: string; applied: string }> {
+    return this.http.post<{ success: boolean; httpd: string; applied: string }>(`/api/cameras/${cameraId}/httpd`, { enabled });
+  }
+
+  setPush(cameraId: string, enabled: boolean): Observable<{ success: boolean; push_enabled: boolean }> {
+    return this.http.post<{ success: boolean; push_enabled: boolean }>(`/api/cameras/${cameraId}/push`, { enabled });
   }
 }

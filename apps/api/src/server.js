@@ -19,14 +19,25 @@
  *  - POST /api/cameras/:id/{power,led,night-vision,rec-mode} - Comandos MQTT
  *  - POST /api/cameras/:id/command - Comando MQTT genérico (whitelist)
  *  - POST /api/cameras/group/power - Comando MQTT a un grupo de cámaras
+ *  - GET /api/cameras/:id/status - Estado real (proxy HTTP a los CGI yi-hack)
+ *  - POST /api/cameras/:id/reboot - Reinicia la cámara (CGI reboot.sh)
+ *  - POST /api/cameras/:id/httpd  - HTTPD yes/no (aplicado en el siguiente boot)
+ *  - POST /api/cameras/:id/push   - Push de movimiento de la cámara (NVR)
  *  - GET /api/timeline        - Datos agregados para el timeline
  *  - GET /api/cameras/:id/stream - URLs de streaming (WebRTC/MSE) vía go2rtc
  *  - GET /api/push/vapid-public-key - Clave pública VAPID (o null)
  *  - POST /api/push/subscribe - Suscribe un endpoint Web Push
  *  - POST /api/push/unsubscribe - Quita una suscripción por endpoint
+ *  - GET /api/cameras/:id/storage - Info SD + directorios de eventos (yi-hack)
+ *  - DELETE /api/cameras/:id/storage/files - Borrar archivo de evento
+ *  - DELETE /api/cameras/:id/storage/dirs - Borrar directorio de eventos
+ *  - POST /api/cameras/:id/storage/purge - Purge por scope (all/last/range)
+ *  - GET /api/cameras/:id/storage/ftp - Config push FTP
+ *  - POST /api/cameras/:id/storage/ftp - Escribir config push FTP
  *
  * Web Push (fase 4): los triggers son el evento `camera-motion` del cliente
- * MQTT (notify inmediato) y el clip indexado en ftp.js. Sin claves VAPID el
+ * MQTT (notify inmediato, salvo que el push de esa cámara esté desactivado
+ * en camera_settings) y el clip indexado en ftp.js. Sin claves VAPID el
  * módulo push funciona en modo noop (no envía, no falla).
  *
  * Proxy go2rtc (live view):
@@ -64,11 +75,14 @@ const mqttClient = require('./mqtt/client');
 
 const videosRouter = require('./routes/videos');
 const camerasRouter = require('./routes/cameras');
+const cameraStatusRouter = require('./routes/camera-status');
 const timelineRouter = require('./routes/timeline');
 const streamRouter = require('./routes/stream');
 const pushRouter = require('./routes/push');
+const storageRouter = require('./routes/storage');
 const webpush = require('./push/webpush');
 const cameraRegistry = require('./camera-registry');
+const { getCameraSetting } = require('./database');
 
 // Configuración
 const PORT = process.env.PORT || 3000;
@@ -137,9 +151,11 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api', videosRouter);
 app.use('/api', camerasRouter);
+app.use('/api', cameraStatusRouter);
 app.use('/api', timelineRouter);
 app.use('/api', streamRouter);
 app.use('/api', pushRouter);
+app.use('/api', storageRouter);
 
 // ============================================
 // WEB PUSH - TRIGGER DE MOVIMIENTO (fase 4)
@@ -151,6 +167,10 @@ app.use('/api', pushRouter);
 // para que ningún error de este handler tume el pipeline de eventos.
 mqttClient.mqttEvents.on('camera-motion', ({ cameraId, eventType }) => {
     try {
+        // Toggle de push por cámara (camera_settings; default: activado)
+        if (!getCameraSetting(cameraId).push_enabled) {
+            return;
+        }
         const camera = cameraRegistry.getCameraById(cameraId);
         const cameraName = camera ? camera.name : cameraId;
         console.log(`[Push] Movimiento de ${cameraId} (${eventType}), notificando`);
@@ -232,11 +252,17 @@ async function startServices() {
             console.log(`         POST /api/cameras/:id/{power,led,night-vision,rec-mode}`);
             console.log(`         POST /api/cameras/:id/command`);
             console.log(`         POST /api/cameras/group/power`);
+            console.log(`         GET /api/cameras/:id/status`);
+            console.log(`         POST /api/cameras/:id/{reboot,httpd,push}`);
             console.log(`         GET /api/timeline`);
             console.log(`         GET /api/cameras/:id/stream`);
             console.log(`         GET /api/push/vapid-public-key`);
             console.log(`         POST /api/push/subscribe`);
             console.log(`         POST /api/push/unsubscribe`);
+            console.log(`         GET /api/cameras/:id/storage`);
+            console.log(`         DELETE /api/cameras/:id/storage/{files,dirs}`);
+            console.log(`         POST /api/cameras/:id/storage/purge`);
+            console.log(`         GET/POST /api/cameras/:id/storage/ftp`);
             console.log(`         /stream-proxy/* → ${GO2RTC_URL}`);
         });
 

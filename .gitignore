@@ -21,6 +21,9 @@ storage/
 # Builds / generated
 dist/
 .angular/
+# Angular build output copied to apps/api/src/public for serving (keep mockup/)
+apps/api/src/public/*
+!apps/api/src/public/mockup/
 
 # OpenCode Agent
 .opencode

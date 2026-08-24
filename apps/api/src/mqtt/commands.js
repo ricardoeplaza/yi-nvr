@@ -14,6 +14,8 @@
  *  - NO_PREFIX     → la cámara no tiene mqtt_prefix configurado (400)
  *  - NOT_CONNECTED → el broker no está conectado (503)
  *  - INVALID       → comando o valor no en la whitelist (400)
+ *  - UNSUPPORTED_ECOSYSTEM → la cámara es "generic" (sin firmware yi-hack):
+ *    no se le envía ningún comando (409)
  */
 
 const registry = require('../camera-registry');
@@ -81,6 +83,13 @@ function resolveCamera(cameraId) {
 function sendCommand(cameraId, command, value) {
     const camera = resolveCamera(cameraId);
 
+    // Las cámaras "generic" (sin firmware yi-hack) no entienden MQTT yi-hack:
+    // nunca se les publica (409 en la capa REST).
+    if (registry.getEcosystem(camera) !== 'yi-hack') {
+        fail('UNSUPPORTED_ECOSYSTEM',
+            `la cámara "${cameraId}" es de ecosistema "${registry.getEcosystem(camera)}": no admite controles remotos (solo datos del NVR)`);
+    }
+
     const allowed = COMMAND_VALUES[command];
     if (!allowed) {
         fail('INVALID', `Comando no soportado: "${command}" (válidos: ${Object.keys(COMMAND_VALUES).join(', ')})`);
@@ -146,6 +155,31 @@ function setSaveVideoOnMotion(cameraId, enabled) {
 }
 
 /**
+ * Pide a la cámara que re-publique TODO su estado (ping de sync): publica
+ * payload vacío a <prefix>/cmnd/camera y la cámara responde re-publicando
+ * cada comando en <prefix>/stat/camera/<cmd> (contrato yi-hack). Sirve
+ * para conocer el estado real de los toggles cuando el HTTP de la cámara
+ * no está disponible.
+ * @param {string} cameraId
+ * @returns {{topic: string}}
+ */
+function syncCameraState(cameraId) {
+    const camera = resolveCamera(cameraId);
+    let topic;
+    try {
+        topic = commandTopic(camera);
+    } catch (e) {
+        const err = new Error(e.message);
+        err.code = 'NO_PREFIX';
+        throw err;
+    }
+    if (!client.publish(topic, '')) {
+        fail('NOT_CONNECTED', 'Broker MQTT no disponible');
+    }
+    return { topic };
+}
+
+/**
  * Enciende/apaga un grupo de cámaras (comando switch_on por cámara). Si
  * alguna falla, el error sube tras publicar las que pudieron (las cámaras
  * son independientes).
@@ -169,5 +203,6 @@ module.exports = {
     setLed,
     setIrcut,
     setSaveVideoOnMotion,
-    setGroupPower
+    setGroupPower,
+    syncCameraState
 };

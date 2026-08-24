@@ -94,6 +94,17 @@ function initSchema() {
         )
     `;
     db.exec(createPushSubscriptions);
+
+    // Ajustes dinámicos por cámara (estado del NVR, no de la cámara).
+    // push_enabled: si el movimiento de esta cámara dispara notificaciones
+    // Web Push (default 1 = sí, cuando no hay fila).
+    const createCameraSettings = `
+        CREATE TABLE IF NOT EXISTS camera_settings (
+            camera_id TEXT PRIMARY KEY,
+            push_enabled INTEGER NOT NULL DEFAULT 1
+        )
+    `;
+    db.exec(createCameraSettings);
 }
 
 /**
@@ -309,6 +320,70 @@ function touchPushSubscription(endpoint) {
     stmt.run(new Date().toISOString(), endpoint);
 }
 
+// ============================================
+// Ajustes dinámicos por cámara (camera_settings)
+// ============================================
+
+/**
+ * Obtiene el ajuste de push de una cámara (default: activado si no hay fila).
+ * @param {string} cameraId
+ * @returns {{push_enabled: boolean}}
+ */
+function getCameraSetting(cameraId) {
+    const stmt = db.prepare('SELECT push_enabled FROM camera_settings WHERE camera_id = ?');
+    const row = stmt.get(cameraId);
+    return { push_enabled: row ? row.push_enabled === 1 : true };
+}
+
+/**
+ * Guarda el ajuste de push de una cámara (upsert por camera_id).
+ * @param {string} cameraId
+ * @param {boolean} enabled
+ */
+function setCameraPushEnabled(cameraId, enabled) {
+    const stmt = db.prepare(`
+        INSERT INTO camera_settings (camera_id, push_enabled)
+        VALUES (?, ?)
+        ON CONFLICT(camera_id) DO UPDATE SET push_enabled = excluded.push_enabled
+    `);
+    stmt.run(cameraId, enabled ? 1 : 0);
+}
+
+// ============================================
+// Últimos eventos MQTT por cámara
+// ============================================
+
+/**
+ * Último evento MQTT de una cámara (cualquier tipo).
+ * @param {string} cameraId
+ * @returns {{event_type: string, received_at: string}|null}
+ */
+function getLastEvent(cameraId) {
+    const stmt = db.prepare(`
+        SELECT event_type, received_at FROM mqtt_events
+        WHERE camera_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+    `);
+    return stmt.get(cameraId) || null;
+}
+
+/**
+ * Último evento de actividad (movimiento/IA) de una cámara.
+ * @param {string} cameraId
+ * @returns {{event_type: string, received_at: string}|null}
+ */
+function getLastMotionEvent(cameraId) {
+    const stmt = db.prepare(`
+        SELECT event_type, received_at FROM mqtt_events
+        WHERE camera_id = ?
+          AND event_type IN ('motion_start', 'ai_human', 'ai_vehicle', 'ai_animal')
+        ORDER BY id DESC
+        LIMIT 1
+    `);
+    return stmt.get(cameraId) || null;
+}
+
 // Inicializamos el esquema al cargar el módulo
 initSchema();
 
@@ -327,5 +402,9 @@ module.exports = {
     deletePushSubscription,
     deleteStalePushSubscriptions,
     touchPushSubscription,
+    getCameraSetting,
+    setCameraPushEnabled,
+    getLastEvent,
+    getLastMotionEvent,
     db
 };

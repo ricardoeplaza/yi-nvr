@@ -2,9 +2,11 @@
     {
         "id": "yihack_camera",
         "name": "Yi-hack camera",
+        "ecosystem": "yi-hack",
         "host": "192.168.1.50",
         "ftp_dir": "yihack_camera",
         "mqtt_prefix": "A4CB8XXXXXXX",
+        "sd_total_mb": 30184,
         "rtsp": { "alt": "standard", "audio": "no" },
         "mqtt_topics": {
             "birth_will": "status",
@@ -29,6 +31,7 @@
     {
         "id": "tuya_camera",
         "name": "Tuya camera",
+        "ecosystem": "generic",
         "host": "192.168.1.51",
         "ftp_dir": "tuya_camera",
         "mqtt_prefix": "",

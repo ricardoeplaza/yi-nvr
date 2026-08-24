@@ -92,7 +92,7 @@ npm install
 npm start
 ```
 
-The server listens on `http://localhost:3000` (HTTP API + static assets) and `2121` (FTP, passive range `1024–1050`).
+The server listens on `http://localhost:3000` (HTTP API + static assets) and `21` (FTP, passive range `1024–1050`). Port `21` is the one the camera hardcodes in `ftppush.sh` (D25); it is a privileged port, so run the API as admin/root (or set `FTP_PORT` to an alternative port and patch `ftppush.sh` on the camera SD — see `docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md` §5.2.1).
 
 ### Camera config (first run)
 

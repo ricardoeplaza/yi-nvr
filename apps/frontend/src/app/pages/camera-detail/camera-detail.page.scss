@@ -17,6 +17,102 @@
 
 
 
+.cam-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 14px 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+
+  .state-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--text-faint);
+  }
+
+  &.on .state-dot { background: var(--green); }
+  &.off { color: var(--text-dim); }
+  &.off .state-dot { background: var(--amber); }
+  &.unreachable .state-dot { background: var(--red); }
+
+  .state-sub {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--amber);
+  }
+}
+
+.sd-section {
+  margin: 10px 14px 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--card);
+
+  .sd-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+
+    .sd-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .sd-value {
+      font-size: 12px;
+      color: var(--text-dim);
+
+      &.dim {
+        color: var(--text-faint);
+        font-style: italic;
+      }
+    }
+  }
+
+  .sd-bar {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--track-bg);
+    overflow: hidden;
+
+    .sd-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: var(--accent-blue);
+      transition: width .3s;
+
+      @media (min-width: 600px) {
+        &:hover { filter: brightness(1.1); }
+      }
+    }
+  }
+
+  .sd-manage {
+    display: block;
+    margin-top: 10px;
+    text-align: center;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--accent-blue);
+    background: var(--card);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    text-decoration: none;
+
+    &:active { background: #f0f5ff; }
+  }
+}
+
 .controls-section, .cam-info-section {
   padding: 16px 14px;
 
@@ -25,6 +121,23 @@
     font-weight: 700;
     margin: 0 0 10px;
   }
+}
+
+.section-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-faint);
+}
+
+.action-error {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--red, #e5484d);
+  background: #fef2f2;
+  font-size: 12px;
+  color: var(--red, #e5484d);
 }
 
 .controls-grid {
@@ -59,18 +172,23 @@
     }
   }
 
-  .reload-btn {
-    grid-column: 1 / -1;
-    padding: 12px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--line);
-    background: var(--card);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--accent-blue);
-    cursor: pointer;
-    &:active { background: var(--track-bg); }
-  }
+    .danger-btn {
+      grid-column: 1 / -1;
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--red);
+      background: var(--card);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--red);
+      cursor: pointer;
+      &:active { background: #fef2f2; }
+      &:disabled {
+        border-color: var(--line);
+        color: var(--text-faint);
+        cursor: not-allowed;
+      }
+    }
 }
 
 .info-grid {

@@ -13,7 +13,15 @@ import { FormatDatePipe } from '../format-date.pipe';
         <span class="camera-icon">📷</span>
       </div>
       <div class="camera-info">
-        <span class="camera-name">{{ camera().name }}</span>
+        <span class="camera-name">
+          <span class="mqtt-dot"
+                [class.online]="camera()?.mqtt?.online === true"
+                [class.offline]="camera()?.mqtt?.online === false"
+                [title]="camera()?.mqtt ? (camera()!.mqtt!.online ? 'MQTT en línea' : 'MQTT sin conexión') : 'MQTT sin datos'">
+          </span>
+          {{ camera().name }}
+          <span class="eco-badge" [class.generic]="camera().ecosystem !== 'yi-hack'">{{ ecoLabel() }}</span>
+        </span>
         <span class="camera-count">{{ camera().video_count }} videos</span>
         @if (camera().has_videos && camera().last_video) {
           <span class="camera-last">{{ camera().last_video | formatDate }}</span>
@@ -27,4 +35,12 @@ import { FormatDatePipe } from '../format-date.pipe';
 })
 export class CameraCardComponent {
   camera = input.required<Camera>();
+
+  ecoLabel(): string {
+    switch (this.camera().ecosystem) {
+      case 'yi-hack': return 'yi-hack';
+      case 'generic': return 'genérica';
+      default: return this.camera().ecosystem;
+    }
+  }
 }

@@ -118,16 +118,20 @@ function getMessages(camera) {
 }
 
 /**
- * Devuelve el tema de comando para un comando concreto.
+ * Devuelve el tema de comando para un comando concreto. Sin `command`
+ * devuelve la base `<prefix>/cmnd/camera` (para el ping de sync con
+ * payload vacío que hace re-publicar TODO el estado de la cámara).
  * @param {Object} camera - Objeto de cámara del registro
- * @param {string} command - Suffix del comando (p. ej. "led", "switch_on")
+ * @param {string} [command] - Suffix del comando (p. ej. "led", "switch_on")
  * @returns {string} - p. ej. "yi-oficina/cmnd/camera/led"
  */
 function commandTopic(camera, command) {
     if (!camera.mqtt_prefix) {
         throw new Error(`La cámara "${camera.id}" no tiene mqtt_prefix configurado`);
     }
-    return `${camera.mqtt_prefix}/cmnd/camera/${command}`;
+    return command
+        ? `${camera.mqtt_prefix}/cmnd/camera/${command}`
+        : `${camera.mqtt_prefix}/cmnd/camera`;
 }
 
 /**

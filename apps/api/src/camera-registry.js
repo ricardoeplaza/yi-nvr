@@ -11,8 +11,21 @@
  *  - ftp_dir: subdirectorio bajo la raíz FTP al que sube la cámara. Las
  *    cámaras que suben a la raíz del FTP (sin subdirectorio) corresponden a
  *    'default' (ver extractCameraName en ftp.js).
+ *  - ecosystem (opcional): ecosistema de la cámara. Valores:
+ *    - "yi-hack": firmware yi-hack; el API puede consultarle TODO por
+ *      HTTP/MQTT (status.json, get_configs.sh, SD, WiFi, controles, reboot).
+ *    - "generic": el resto (p. ej. Tuya): el NVR SOLO indexa sus clips por
+ *      FTP; NO se le consulta ni envía nada al dispositivo (no sabe
+ *      responder). El API devuelve solo lo que el NVR ya tiene (IP, nº de
+ *      videos, último video, últimos eventos).
+ *    Default si falta: "generic" (seguro: nunca se consulta por HTTP/MQTT a
+ *    una cámara que no sabe responder; una yi-hack debe marcarse SIEMPRE
+ *    explícitamente).
  *  - mqtt_prefix: prefix MQTT yi-hack de la cámara (por defecto de fábrica:
  *    MAC sin dos puntos; personalizable, p. ej. "yi-oficina").
+ *  - sd_total_mb (opcional): capacidad total de la SD en MB. Ningún CGI del
+ *    firmware expone el total (solo free_sd en %), así que se configura aquí
+ *    para poder calcular usado/libre en la página de detalle.
  *  - capabilities: objeto de booleanos (led, ircut, rec_mode, power).
  *  - mqtt_topics (opcional): overrides de los suffixes de tema MQTT por
  *    cámara (birth_will, motion, motion_image, motion_files, sound_detection).
@@ -31,6 +44,9 @@ const path = require('path');
 
 // Ruta por defecto del archivo de configuración
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'config', 'cameras.json');
+
+// Ecosistemas de cámara válidos (ver cabecera). Default: "generic".
+const ECOSYSTEMS = ['yi-hack', 'generic'];
 
 // Estado en memoria (se reemplaza completo en cada carga)
 let cameras = [];
@@ -80,6 +96,11 @@ function validateCameras(data) {
             }
         }
 
+        // Ecosistema (opcional): "yi-hack" | "generic" (default "generic")
+        if (cam.ecosystem !== undefined && !ECOSYSTEMS.includes(cam.ecosystem)) {
+            throw new Error(`cameras[${i}]: "ecosystem" debe ser "yi-hack" o "generic"`);
+        }
+
         // El prefix MQTT debe ser único y no vacío (se usa para resolver
         // de tema → cámara en el cliente MQTT)
         if (cam.mqtt_prefix !== '') {
@@ -87,6 +108,14 @@ function validateCameras(data) {
                 throw new Error(`cameras[${i}]: "mqtt_prefix" duplicado: "${cam.mqtt_prefix}"`);
             }
             seenPrefixes.add(cam.mqtt_prefix);
+        }
+
+        // Capacidad total de la SD (opcional): número positivo en MB
+        if (cam.sd_total_mb !== undefined) {
+            if (typeof cam.sd_total_mb !== 'number' || !Number.isFinite(cam.sd_total_mb) ||
+                    cam.sd_total_mb <= 0) {
+                throw new Error(`cameras[${i}]: "sd_total_mb" debe ser un número positivo (MB)`);
+            }
         }
 
         // Overrides opcionales del contrato MQTT (mapas de string → string)
@@ -162,6 +191,18 @@ function getCameraById(id) {
 }
 
 /**
+ * Ecosistema de una cámara, aplicando el default "generic" si el campo no
+ * está en cameras.json (ver cabecera: "generic" es el default seguro).
+ * @param {Object|undefined} cam
+ * @returns {"yi-hack"|"generic"}
+ */
+function getEcosystem(cam) {
+    return cam && typeof cam.ecosystem === 'string' && cam.ecosystem !== ''
+        ? cam.ecosystem
+        : 'generic';
+}
+
+/**
  * Busca una cámara por su ftp_dir (el valor que se guarda como camera_name en la BD).
  * @param {string} dir
  * @returns {Object|undefined}
@@ -192,10 +233,12 @@ function reload() {
 loadCameras();
 
 module.exports = {
+    ECOSYSTEMS,
     getAllCameras,
     getCameraById,
     getCameraByFtpDir,
     getCameraByMqttPrefix,
+    getEcosystem,
     loadCameras,
     reload,
     validateCameras

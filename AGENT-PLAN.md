@@ -42,7 +42,7 @@ Working project at repo root with real data (~90 clips, cameras `oficina` + defa
 
 | File | Verdict |
 |---|---|
-| `src/ftp.js` | **KEEP.** ftp-srv on port 2121 (passive 1024–1050), user `camera`/`surveillance123`, chokidar watcher → processing pipeline. Only changes: config via env, camera mapping via registry. |
+| `src/ftp.js` | **KEEP.** ftp-srv on port 21 (passive 1024–1050; privileged port — see D25), user `camera`/`surveillance123`, chokidar watcher → processing pipeline. Only changes: config via env, camera mapping via registry. |
 | `src/processor.js` | **KEEP.** ffmpeg thumbnail (JPG 640x360) + animated WebP preview (320px, 10 frames), `nice -n 19` on Linux (already guarded for Windows). |
 | `src/database.js` | **KEEP + EXTEND.** better-sqlite3, WAL, `videos` table. Keep the `videos` table schema **unchanged** (no migration of existing data). Add new tables only. |
 | `src/server.js` | **MODULARIZE.** Split into `routes/*`. The 5 existing endpoints must keep identical URLs, query params, and JSON response shapes. |
@@ -138,7 +138,7 @@ Tasks:
 7. Baseline commit.
 
 **Acceptance criteria:**
-- From `apps/api`: `npm install && npm start` boots both FTP (2121) and HTTP (3000) on Windows.
+- From `apps/api`: `npm install && npm start` boots both FTP (21) and HTTP (3000) on Windows.
 - `curl.exe http://localhost:3000/api/videos` returns the existing ~90 clips with correct `original_url`/`thumbnail_url`/`preview_url` (files still served from the moved `storage/`).
 - `curl.exe http://localhost:3000/api/timeline` and `/api/cameras` return the same shapes as before.
 - No file in git contains absolute dev-machine paths.
@@ -234,7 +234,7 @@ Tasks:
 **Acceptance criteria:**
 - `curl.exe http://localhost:3000/stream-proxy/api/streams` returns the go2rtc stream list (proxied).
 - `GET /api/cameras/oficina/stream` returns the JSON above.
-- `[INTEG]` Full compose: only port 3000 (api) + 2121/1024-1050 (FTP) published to the host; go2rtc and mosquitto unreachable from the host.
+- `[INTEG]` Full compose: only port 3000 (api) + 21/1024-1050 (FTP) published to the host; go2rtc and mosquitto unreachable from the host.
 - `[INTEG]`/`[SBC]` Real WebRTC playback in a browser against a real camera (or an RTSP test source, e.g. `rtsp://w8ctm77fihhv2jnd.x.cache1.codelibrary.net/...` if the environment allows external test streams; otherwise `DEFERRED-TO-SBC`).
 - `git tag phase-3`.
 
@@ -327,7 +327,7 @@ Tasks:
    COPY apps/api .
    COPY --from=frontend-build /frontend/dist/<name>/browser ./public
    ENV STORAGE_DIR=/app/storage
-   EXPOSE 3000 2121
+    EXPOSE 3000 21
    CMD ["node", "src/server.js"]
    ```
    Build context is the **repo root** (it needs `apps/frontend`).
@@ -340,7 +340,7 @@ Tasks:
          dockerfile: apps/api/Dockerfile
        ports:
          - "3000:3000"
-         - "2121:2121"
+          - "21:21"
          - "1024-1050:1024-1050"   # FTP passive
        volumes:
          - ./storage:/app/storage
@@ -385,7 +385,7 @@ Tasks:
      });
      ```
    - Optional HTTPS: if `HTTPS_CERT_PATH` + `HTTPS_KEY_PATH` are set and the files exist → `https.createServer`; else plain HTTP. If push is enabled (VAPID set) but no HTTPS, log a loud warning at boot.
-4. `[INTEG]` On the Debian amd64 machine: `docker compose build && docker compose up -d`, run `scripts/integration-check.sh` (create it in this phase): health endpoint, `/api/videos` with a test clip, thumbnail generation **inside the container** (proves ffmpeg works), `/stream-proxy/api/streams`, SPA index served at `/`, SPA deep-link `/cameras/oficina` returns `index.html`, no host ports beyond 3000/2121/1024-1050 (`ss -ltn`).
+4. `[INTEG]` On the Debian amd64 machine: `docker compose build && docker compose up -d`, run `scripts/integration-check.sh` (create it in this phase): health endpoint, `/api/videos` with a test clip, thumbnail generation **inside the container** (proves ffmpeg works), `/stream-proxy/api/streams`, SPA index served at `/`, SPA deep-link `/cameras/oficina` returns `index.html`, no host ports beyond 3000/21/1024-1050 (`ss -ltn`).
 
 **Acceptance criteria:**
 - `[INTEG]` Clean `docker compose up` from a fresh clone + `.env` on Debian amd64; all checks in `integration-check.sh` pass.
@@ -472,8 +472,10 @@ HOST=0.0.0.0
 HTTPS_CERT_PATH=
 HTTPS_KEY_PATH=
 
-# FTP (keep 2121 — do NOT use port 21, it needs root/capabilities)
-FTP_PORT=2121
+# FTP (default 21 = the port the camera hardcodes in ftppush.sh, D25.
+# Privileged port → run the API as root/admin or with CAP_NET_BIND_SERVICE.
+# Alternative port: patch ftppush.sh — docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md §5.2.1)
+FTP_PORT=21
 FTP_HOST=0.0.0.0
 FTP_USER=camera
 FTP_PASS=surveillance123
@@ -530,7 +532,7 @@ STORAGE_MAX_GB=10
 - `curl` in PowerShell is an alias to `Invoke-WebRequest` — always use `curl.exe`.
 - File locking: Windows may hold handles briefly after deletes; the FTP pipeline's 2 s settle + chokidar `awaitWriteFinish` already cope. Do not "fix" these timings without reason.
 - `node_modules` is per-OS/per-arch: never copy it between environments; always `npm ci` at the destination (Docker does this).
-- Ports: 2121 + 1024–1050 are fine on both OSes; check for local conflicts on Windows (Hyper-V/WSL2 can reserve ranges — if 1024–1050 collide in dev, override `FTP_PASSIVE_RANGE` via env; add this env var to `ftp.js` in phase 0 if you touch the file anyway).
+- Ports: 21 + 1024–1050. Port 21 is privileged (< 1024): the API must run as admin/root (or with `CAP_NET_BIND_SERVICE`) to bind it (D25). Check for local conflicts on Windows (Hyper-V/WSL2 can reserve ranges — if 1024–1050 collide in dev, override `FTP_PASSIVE_RANGE` via env; add this env var to `ftp.js` in phase 0 if you touch the file anyway).
 
 ## 11. Explicitly OUT of scope
 

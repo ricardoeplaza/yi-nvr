@@ -18,7 +18,7 @@
  *
  * Comandos MQTT: éxito 200 {success, published, payload}; cámara desconocida
  * 404 {success:false, error}; broker desconectado 503; comando/valor/mode
- * inválido 400.
+ * inválido 400; cámara de ecosistema "generic" 409 (no admite controles).
  */
 
 const express = require('express');
@@ -38,6 +38,7 @@ function mqttErrorStatus(error) {
     switch (error.code) {
         case 'NOT_FOUND': return 404;
         case 'NOT_CONNECTED': return 503;
+        case 'UNSUPPORTED_ECOSYSTEM': return 409;
         case 'NO_PREFIX':
         case 'INVALID':
         default: return 400;
@@ -62,15 +63,20 @@ router.get('/cameras', (req, res) => {
 
         const data = cameras.map(cam => {
             const stats = statsByCamera[cam.ftp_dir];
+            const mqttState = mqttClient.getCameraMqttState(cam.id);
             return {
                 id: cam.id,
                 name: cam.name,
                 host: cam.host,
+                ecosystem: registry.getEcosystem(cam),
                 ftp_dir: cam.ftp_dir,
                 capabilities: cam.capabilities,
                 has_videos: stats ? stats.count > 0 : false,
                 video_count: stats ? stats.count : 0,
-                last_video: stats ? stats.last_video : null
+                last_video: stats ? stats.last_video : null,
+                mqtt: mqttState
+                    ? { online: mqttState.online, lastSeen: mqttState.lastSeen }
+                    : null
             };
         });
 
