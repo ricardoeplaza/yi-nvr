@@ -1,7 +1,7 @@
 /**
  * camera-registry.js
  *
- * Registro de cámaras definido en `config/cameras.json` (fuerte tipado por
+ * Registro de cámaras definido en `infra/cameras.json` (fuerte tipado por
  * validación, no por confianza en el contenido del archivo).
  *
  * El archivo lista las cámaras del sistema con:
@@ -36,14 +36,15 @@
  * La validación (validateCameras) es una función pura que Lanza un Error con
  * mensaje descriptivo ante cualquier problema, lo que permite probarla sin
  * arrancar el servidor. loadCameras() acepta una ruta opcional por parámetro
- * (default: src/config/cameras.json) por la misma razón.
+ * (default: infra/cameras.json) por la misma razón.
  */
 
 const fs = require('fs');
 const path = require('path');
 
-// Ruta por defecto del archivo de configuración
-const DEFAULT_CONFIG_PATH = path.join(__dirname, 'config', 'cameras.json');
+// Ruta del archivo de configuración. Dev y Docker comparten <repo>/infra/cameras.json
+// (gitignored; plantilla en infra/cameras.json.example). Ver paths.js.
+const { CAMERAS_JSON_PATH: DEFAULT_CONFIG_PATH } = require('./paths');
 
 // Ecosistemas de cámara válidos (ver cabecera). Default: "generic".
 const ECOSYSTEMS = ['yi-hack', 'generic'];
@@ -145,7 +146,7 @@ function validateCameras(data) {
 
 /**
  * Carga, valida y actualiza el estado en memoria del registro.
- * @param {string} [filePath] - Ruta opcional del archivo (default: src/config/cameras.json)
+ * @param {string} [filePath] - Ruta opcional del archivo (default: infra/cameras.json)
  * @returns {number} - Número de cámaras cargadas
  * @throws {Error} - Si el archivo no se puede leer, el JSON es malformado o
  *                   la validación falla

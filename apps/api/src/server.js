@@ -45,11 +45,15 @@
  *    Si go2rtc no está corriendo (normal en dev), responde 502 JSON sin
  *    tumbar el proceso. Montado tras las rutas API y los estáticos.
  *
- * El frontend se sirve desde /public como archivos estáticos.
+ * El frontend (Angular PWA) se sirve desde PUBLIC_DIR como archivos estáticos
+ * (configurable vía PUBLIC_DIR; default: src/public) + SPA fallback:
+ * cualquier GET que no pille ruta/API/estático devuelve index.html.
  * Los videos procesados se sirven desde /storage/processed.
+ * HTTPS opcional: HTTPS_CERT_PATH + HTTPS_KEY_PATH (fase 9, tailscale cert).
  */
 
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '..', '..', '.env') });
 require('dotenv').config();
 
@@ -91,8 +95,10 @@ const HOST = process.env.HOST || '0.0.0.0';
 // go2rtc (live view): URL del sidecar. Dev nativo: http://127.0.0.1:1984
 const GO2RTC_URL = process.env.GO2RTC_URL || 'http://go2rtc:1984';
 
-// Directorio de almacenamiento (override vía env para Docker; por defecto src/storage)
-const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.join(__dirname, 'storage');
+// Rutas de almacenamiento (ver paths.js): DATA_DIR (DB + processed),
+// RECORDINGS_DIR (clips FTP) y PUBLIC_DIR (build del PWA). En dev viven en la
+// raíz del repo (<repo>/data, <repo>/recordings) y en /app/* en Docker.
+const { DATA_DIR, RECORDINGS_DIR, PUBLIC_DIR } = require('./paths');
 
 // Creamos la aplicación Express
 const app = express();
@@ -104,14 +110,21 @@ app.use(express.json());
 // SERVICIO DE ARCHIVOS ESTÁTICOS
 // ============================================
 
-// Frontend: servimos los archivos de /public
-app.use(express.static(path.join(__dirname, 'public')));
+// Frontend: servimos los archivos de PUBLIC_DIR. index.html siempre se
+// revalida (no-cache) para que ngsw detecte nuevas versiones del PWA.
+app.use(express.static(PUBLIC_DIR, {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+            res.setHeader('Cache-Control', 'no-cache');
+        }
+    }
+}));
 
 // Videos procesados: servimos thumbnails y previews
-app.use('/processed', express.static(path.join(STORAGE_DIR, 'processed')));
+app.use('/processed', express.static(path.join(DATA_DIR, 'processed')));
 
 // Videos originales: servimos los .mp4 recibidos por FTP
-app.use('/videos', express.static(path.join(STORAGE_DIR, 'ftp')));
+app.use('/videos', express.static(RECORDINGS_DIR));
 
 // ============================================
 // API REST - HEALTH
@@ -232,6 +245,30 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================
+// SPA FALLBACK (Angular PWA)
+// ============================================
+
+// Registrado DESPUÉS de todas las rutas API, los estáticos y el proxy
+// go2rtc: cualquier GET que no haya pillado nada (y no pida JSON) recibe
+// index.html para que el router del cliente resuelva la ruta (deep links:
+// /cameras/oficina, /videos, /timeline...). Si PUBLIC_DIR no tiene build
+// (dev sin `npm run build:web`), se deja pasar y Express responde 404.
+app.use((req, res, next) => {
+    if (req.method !== 'GET' || (req.headers['accept'] || '').includes('application/json')) {
+        return next();
+    }
+    if (req.path.startsWith('/api/') || req.path.startsWith('/stream-proxy/') ||
+        req.path.startsWith('/videos/') || req.path.startsWith('/processed/')) {
+        return next();
+    }
+    const idx = path.join(PUBLIC_DIR, 'index.html');
+    if (fs.existsSync(idx)) {
+        return res.sendFile(idx, { headers: { 'Cache-Control': 'no-cache' } });
+    }
+    next();
+});
+
+// ============================================
 // INICIO DE SERVICIOS
 // ============================================
 
@@ -240,9 +277,30 @@ async function startServices() {
         // Iniciamos el servidor FTP para recepción de videos
         await startFtpServer();
 
-        // Iniciamos el servidor web Express
-        const server = app.listen(PORT, HOST, () => {
-            console.log(`[Server] API Web iniciada en http://${HOST}:${PORT}`);
+        // Iniciamos el servidor web Express. Si HTTPS_CERT_PATH + HTTPS_KEY_PATH
+        // están set y los archivos existen → TLS (Web Push exige contexto seguro;
+        // en producción: `tailscale cert`, fase 9). Si no, HTTP plano.
+        const httpsCert = process.env.HTTPS_CERT_PATH || '';
+        const httpsKey = process.env.HTTPS_KEY_PATH || '';
+        const useHttps = Boolean(httpsCert && httpsKey &&
+            fs.existsSync(httpsCert) && fs.existsSync(httpsKey));
+
+        if (webpush.isConfigured() && !useHttps) {
+            console.warn('[Server] AVISO: VAPID configurado pero el servidor arranca en HTTP plano.');
+            console.warn('[Server]        Web Push NO funcionará (el navegador exige contexto seguro).');
+            console.warn('[Server]        Configura HTTPS_CERT_PATH/HTTPS_KEY_PATH (fase 9: tailscale cert).');
+        }
+
+        const server = useHttps
+            ? require('https').createServer({
+                cert: fs.readFileSync(httpsCert),
+                key: fs.readFileSync(httpsKey)
+            }, app)
+            : app;
+
+        const scheme = useHttps ? 'https' : 'http';
+        server.listen(PORT, HOST, () => {
+            console.log(`[Server] API Web iniciada en ${scheme}://${HOST}:${PORT}`);
             console.log(`[Server] Endpoints disponibles:`);
             console.log(`         GET /api/health`);
             console.log(`         GET /api/videos`);

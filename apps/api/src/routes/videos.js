@@ -13,9 +13,9 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { getVideos, getVideoById, deleteVideo } = require('../database');
+const { DATA_DIR, RECORDINGS_DIR } = require('../paths');
 
-// Directorio de almacenamiento (mismo criterio que server.js)
-const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.join(__dirname, '..', 'storage');
+// Directorios de almacenamiento (mismo criterio que server.js, vía paths.js)
 
 const router = express.Router();
 
@@ -33,12 +33,13 @@ function resolveStoredPath(storedPath, marker) {
     if (fs.existsSync(storedPath)) {
         return storedPath;
     }
+    const baseDir = marker === 'ftp' ? RECORDINGS_DIR : path.join(DATA_DIR, marker);
     const parts = path.normalize(storedPath).split(path.sep);
     const idx = parts.lastIndexOf(marker);
     if (idx >= 0 && idx < parts.length - 1) {
-        return path.join(STORAGE_DIR, marker, ...parts.slice(idx + 1));
+        return path.join(baseDir, ...parts.slice(idx + 1));
     }
-    return path.join(STORAGE_DIR, marker, path.basename(storedPath));
+    return path.join(baseDir, path.basename(storedPath));
 }
 
 /**
@@ -47,8 +48,7 @@ function resolveStoredPath(storedPath, marker) {
  * @returns {string}
  */
 function buildOriginalUrl(originalPath) {
-    const ftpRoot = path.join(STORAGE_DIR, 'ftp');
-    const rel = path.relative(ftpRoot, resolveStoredPath(originalPath, 'ftp'));
+    const rel = path.relative(RECORDINGS_DIR, resolveStoredPath(originalPath, 'ftp'));
     if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
         return `/videos/${rel.split(path.sep).join('/')}`;
     }

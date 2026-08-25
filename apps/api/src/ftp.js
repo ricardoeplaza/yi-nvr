@@ -27,6 +27,7 @@ const { processVideo } = require('./processor');
 const { insertVideo, getCameraSetting } = require('./database');
 const { getCameraByFtpDir } = require('./camera-registry');
 const webpush = require('./push/webpush');
+const { RECORDINGS_DIR } = require('./paths');
 
 // Configuración del servidor FTP
 const FTP_PORT = process.env.FTP_PORT || 21;
@@ -34,9 +35,8 @@ const FTP_HOST = process.env.FTP_HOST || '0.0.0.0';
 const FTP_USER = process.env.FTP_USER || 'camera';
 const FTP_PASS = process.env.FTP_PASS || 'surveillance123';
 
-// Directorio donde se almacenan los videos recibidos por FTP
-const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.join(__dirname, 'storage');
-const FTP_ROOT = path.join(STORAGE_DIR, 'ftp');
+// Directorio donde se almacenan los videos recibidos por FTP (clips entrantes,
+// HDD opcional). Dev: <repo>/recordings, Docker: /app/recordings (ver paths.js).
 
 // Rango de puertos pasivos (override vía env, ej. "2000-2050", p. ej. si Hyper-V/WSL2
 // reserva 1024-1050 en Windows). Default: 1024-1050.
@@ -116,8 +116,8 @@ function getFtpSuggestedConfig(ftpDir) {
 }
 
 // Aseguramos que el directorio FTP exista
-if (!fs.existsSync(FTP_ROOT)) {
-    fs.mkdirSync(FTP_ROOT, { recursive: true });
+if (!fs.existsSync(RECORDINGS_DIR)) {
+    fs.mkdirSync(RECORDINGS_DIR, { recursive: true });
 }
 
 // Creamos la instancia del servidor FTP
@@ -138,7 +138,7 @@ const ftpServer = new FtpSrv({
  * @returns {string} - Nombre de la cámara
  */
 function extractCameraName(filePath) {
-    const relativePath = path.relative(FTP_ROOT, filePath);
+    const relativePath = path.relative(RECORDINGS_DIR, filePath);
     const parts = relativePath.split(path.sep);
     // Si hay subdirectorio, usamos el primer segmento como nombre de cámara
     return parts.length > 1 ? parts[0] : 'default';
@@ -240,9 +240,9 @@ async function handleNewVideo(filePath) {
  * Monitorea el directorio FTP en busca de nuevos archivos .mp4.
  */
 function setupFileWatcher() {
-    console.log(`[FTP] Iniciando monitoreo de directorio: ${FTP_ROOT}`);
+    console.log(`[FTP] Iniciando monitoreo de directorio: ${RECORDINGS_DIR}`);
     
-    const watcher = chokidar.watch(FTP_ROOT, {
+    const watcher = chokidar.watch(RECORDINGS_DIR, {
         ignored: /(^|[\/\\])\../, // Ignorar archivos ocultos
         persistent: true,
         ignoreInitial: true, // No procesar archivos existentes al inicio
@@ -290,7 +290,7 @@ function setupEventHandlers() {
         if (username === FTP_USER && password === FTP_PASS) {
             console.log(`[FTP] Usuario ${username} autenticado correctamente`);
             // Resolvemos con el directorio raíz para este usuario
-            resolve({ root: FTP_ROOT });
+            resolve({ root: RECORDINGS_DIR });
         } else {
             console.warn(`[FTP] Autenticación fallida para ${username}`);
             reject(new Error('Invalid username or password'));
@@ -324,7 +324,7 @@ async function startFtpServer() {
         await ftpServer.listen();
         ftpListening = true;
         console.log(`[FTP] Servidor iniciado en ${FTP_HOST}:${FTP_PORT}`);
-        console.log(`[FTP] Directorio raíz: ${FTP_ROOT}`);
+        console.log(`[FTP] Directorio raíz: ${RECORDINGS_DIR}`);
         console.log(`[FTP] Credenciales: ${FTP_USER} / ${FTP_PASS}`);
         
         // Iniciamos el watcher de archivos
@@ -351,5 +351,5 @@ module.exports = {
     getNvrPublicIp,
     getFtpSuggestedConfig,
     ftpServer,
-    FTP_ROOT
+    RECORDINGS_DIR
 };

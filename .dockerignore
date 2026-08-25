@@ -1,0 +1,30 @@
+# VCS (no hace falta en la imagen)
+.git
+
+# Dependencias: se reconstruyen con `npm ci` DENTRO de la imagen.
+# NUNCA copiar el node_modules de la máquina de dev: better-sqlite3 es nativo
+# y el binding de Windows/Linux/ARM no es portable (ver D6, docs/ARCHITECTURE.md).
+node_modules
+apps/api/node_modules
+apps/frontend/node_modules
+
+# Builds / cachés de dev
+dist
+.angular
+apps/frontend/dist
+# Build de Angular copiado a mano en dev (lo genera el stage frontend-build)
+apps/api/src/public
+
+# Storage: datos reales, NUNCA en la imagen (en Docker son volúmenes: ./data, ./recordings)
+data
+recordings
+storage
+apps/api/src/storage
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# Secrets / entorno (en Docker los env los pasa docker-compose)
+.env
+.env.*

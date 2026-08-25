@@ -4,7 +4,7 @@
 # docs/ARCHITECTURE.md).
 #
 # Rules:
-# - One stream per camera id from apps/api/src/config/cameras.json
+# - One stream per camera id from infra/cameras.json
 #   (the id is what `GET /api/cameras/:id/stream` passes to go2rtc).
 # - A stream is a list of sources. Prefix `ffmpeg:` to normalize/transcode
 #   a source (e.g. H.265 → H.264); a plain stream name as source creates a

@@ -6,19 +6,28 @@ services:
     ports:
       - "3000:3000"
       - "21:21"
-      - "1024-1050:1024-1050"
+      - "1024-1027:1024-1027"
     volumes:
-      - ./storage:/app/storage
+      - ./data:/app/data
+      - ./recordings:/app/recordings
+      - ./infra/cameras.json:/app/infra/cameras.json
     environment:
-      - STORAGE_DIR=/app/storage
+      - DATA_DIR=/app/data
+      - RECORDINGS_DIR=/app/recordings
+      - CAMERAS_JSON_PATH=/app/infra/cameras.json
+      - FTP_PASSIVE_RANGE=1024-1027
       - FFMPEG_CONCURRENCY=${FFMPEG_CONCURRENCY:-1}
       - FFMPEG_THREADS=${FFMPEG_THREADS:-2}
       - PREVIEW_SECONDS=${PREVIEW_SECONDS:-4}
       - PREVIEW_FPS=${PREVIEW_FPS:-6}
       - MQTT_BROKER_URL=mqtt://mosquitto:1883
-      - GO2RTC_URL=http://go2rtc:1984
+      - GO2RTC_URL=http://${NVR_PUBLIC_IP}:1984
+      - NVR_PUBLIC_IP=${NVR_PUBLIC_IP}
+      - FTP_USER=${FTP_USER:-camera}
+      - FTP_PASS=${FTP_PASS:-surveillance123}
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_CONTACT_EMAIL=${VAPID_CONTACT_EMAIL}
       - API_AUTH_TOKEN=${API_AUTH_TOKEN}
       - RETENTION_DAYS=${RETENTION_DAYS:-30}
       - STORAGE_MAX_GB=${STORAGE_MAX_GB:-10}
@@ -26,11 +35,14 @@ services:
     restart: unless-stopped
   mosquitto:
     image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
     volumes:
       - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
     restart: unless-stopped
   go2rtc:
     image: alexxit/go2rtc:latest
+    network_mode: host
     volumes:
       - ./infra/go2rtc:/config
     entrypoint:

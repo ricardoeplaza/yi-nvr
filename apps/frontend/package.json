@@ -5,6 +5,7 @@
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
+    "build:web": "ng build && node scripts/build-web.cjs",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },

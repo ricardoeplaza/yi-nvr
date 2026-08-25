@@ -22,10 +22,10 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const { createQueue } = require('./queue');
+const { DATA_DIR } = require('./paths');
 
 // Directorio de salida para los archivos procesados
-const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.join(__dirname, 'storage');
-const PROCESSED_DIR = path.join(STORAGE_DIR, 'processed');
+const PROCESSED_DIR = path.join(DATA_DIR, 'processed');
 
 // Límite de concurrencia del pipeline de ffmpeg: cuántos videos se
 // procesan a la vez. Con 1 (default) solo corren los ffmpeg de un video

@@ -36,7 +36,7 @@ const fs = require('fs');
 const path = require('path');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const CAMERAS_JSON_PATH = path.join(__dirname, '..', 'src', 'config', 'cameras.json');
+const CAMERAS_JSON_PATH = path.join(REPO_ROOT, 'infra', 'cameras.json');
 
 const VALID_ALT = ['standard', 'alternative', 'go2rtc'];
 const VALID_AUDIO = ['no', 'none', 'pcm', 'alaw', 'ulaw', 'aac'];

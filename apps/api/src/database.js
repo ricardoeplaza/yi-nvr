@@ -21,15 +21,15 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const { DATA_DIR } = require('./paths');
 
 // Ruta de almacenamiento persistente (exenta de OverlayFS en Armbian).
-// Sobrescribible vía STORAGE_DIR (Docker monta el volumen en /app/storage).
-const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.join(__dirname, 'storage');
-const DB_PATH = path.join(STORAGE_DIR, 'surveillance.db');
+// DATA_DIR: <repo>/data en dev, /app/data en Docker (ver paths.js).
+const DB_PATH = path.join(DATA_DIR, 'surveillance.db');
 
 // Aseguramos que el directorio de almacenamiento exista
-if (!fs.existsSync(STORAGE_DIR)) {
-    fs.mkdirSync(STORAGE_DIR, { recursive: true });
+if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
 // Instancia de la base de datos (modo verbose opcional para debug)

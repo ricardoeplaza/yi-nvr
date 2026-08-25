@@ -12,13 +12,11 @@
 
 const path = require('path');
 const Database = require('better-sqlite3');
+const { DATA_DIR } = require('../src/paths');
 
 const n = parseInt(process.argv[2], 10) > 0 ? parseInt(process.argv[2], 10) : 10;
 
-const storageDir = process.env.STORAGE_DIR
-    ? path.resolve(process.env.STORAGE_DIR)
-    : path.join(__dirname, '..', 'src', 'storage');
-const dbPath = path.join(storageDir, 'surveillance.db');
+const dbPath = path.join(DATA_DIR, 'surveillance.db');
 
 const db = new Database(dbPath, { readonly: true, fileMustExist: true });
 const rows = db.prepare('SELECT * FROM mqtt_events ORDER BY id DESC LIMIT ?').all(n);

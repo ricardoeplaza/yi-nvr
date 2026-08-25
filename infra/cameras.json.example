@@ -1,0 +1,22 @@
+[
+    {
+        "id": "camera1",
+        "name": "Camera 1",
+        "ecosystem": "yi-hack",
+        "host": "192.168.1.50",
+        "ftp_dir": "camera1",
+        "mqtt_prefix": "A4CB8XXXXXXX",
+        "sd_total_mb": 30184,
+        "rtsp": { "alt": "standard", "audio": "no" },
+        "capabilities": { "led": true, "ircut": true, "rec_mode": true, "power": false }
+    },
+    {
+        "id": "default",
+        "name": "Default",
+        "host": "",
+        "ftp_dir": "default",
+        "mqtt_prefix": "",
+        "rtsp": { "alt": "standard", "audio": "no" },
+        "capabilities": { "led": false, "ircut": false, "rec_mode": false, "power": false }
+    }
+]

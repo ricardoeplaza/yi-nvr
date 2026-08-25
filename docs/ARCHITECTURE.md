@@ -60,6 +60,7 @@ yi-nvr/
 ├── .gitignore
 ├── .gitattributes
 ├── infra/
+│   ├── cameras.json.example         # template; real cameras.json is gitignored (dev + Docker shared)
 │   ├── mosquitto/mosquitto.conf
 │   └── go2rtc/go2rtc.yaml.example   # template; real go2rtc.yaml is manual + gitignored (D17)
 ├── apps/
@@ -73,21 +74,21 @@ yi-nvr/
 │   │       ├── database.js
 │   │       ├── camera-registry.js
 │   │       ├── retention.js
-│   │       ├── config/cameras.json.example # template; real cameras.json is gitignored
 │   │       ├── mqtt/{client,topics,commands}.js
 │   │       ├── push/webpush.js
 │   │       └── routes/{videos,cameras,timeline,push,stream}.js
 │   └── frontend/                  # workspace Angular (fase 5)
-├── storage/                       # destino del volumen Docker (copia para integración)
+├── data/                          # DB + processed (dev + Docker; SSD)
+├── recordings/                    # clips entrantes (dev + Docker; HDD)
 ├── scripts/integration-check.sh
 └── docs/{ARCHITECTURE,API}.md
 ```
 
-Notas de almacenamiento: `database.js`, `ftp.js` y `processor.js` resuelven el storage
-relativo a `__dirname` (`src/storage`). En dev los datos reales viven en
-`apps/api/src/storage/` (nunca en git). En Docker, `STORAGE_DIR=/app/storage` apunta al
-volumen `./storage` montado en la raíz del repo (una **copia** para pruebas de
-integración; los datos reales de dev no se mueven a la raíz).
+Notas de almacenamiento: `paths.js` (apps/api/src) es la única fuente de verdad de
+las rutas. En dev los datos viven FUERA del source, en la raíz del repo: `data/`
+(DB + processed) y `recordings/` (clips entrantes), ambos gitignored. En Docker
+(fase 6) se sobreescribe vía env: `DATA_DIR=/app/data` (SSD) y
+`RECORDINGS_DIR=/app/recordings` (HDD), montados desde `./data` y `./recordings`.
 
 ## Decisions
 
@@ -120,26 +121,34 @@ según el veredicto KEEP de la sección 3 del plan). Verificado tras el cambio: 
 (idéntico al previo), 0 filas con el prefijo antiguo y los 261 archivos (87 originales
 + 87 thumbnails + 87 previews) existen en disco.
 
-### D3 (fase 0) — `STORAGE_DIR` con default por `__dirname`
-Los tres módulos usan:
+### D3 (fase 0) — `DATA_DIR` / `RECORDINGS_DIR` centralizados en `paths.js`
+`apps/api/src/paths.js` es la única fuente de verdad (los módulos la requieren; antes
+cada uno repetía el default con su propia profundidad relativa a `__dirname`):
 
 ```js
-const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR)
-                                            : path.join(__dirname, 'storage');
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..'); // yi-nvr/
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR)
+                                      : path.join(REPO_ROOT, 'data');
+const RECORDINGS_DIR = process.env.RECORDINGS_DIR ? path.resolve(process.env.RECORDINGS_DIR)
+                                                  : path.join(REPO_ROOT, 'recordings');
 ```
 
-- Dev (Windows/Linux): default `apps/api/src/storage`, donde viven los datos reales.
-- Docker: `STORAGE_DIR=/app/storage` (volumen montado).
-- `server.js` usa la misma constante para los montajes estáticos `/videos` y
-  `/processed` y para calcular `original_url` con `path.relative`, por lo que las URLs
-  siguen siendo relativas (`/videos/...`, `/processed/...`) y correctas tras el
-  movimiento.
+- Dev (Windows/Linux): default `<repo>/data` + `<repo>/recordings`, FUERA del source
+  (gitignored). Mismo layout que Docker → los datos nunca se meten en el árbol de código.
+- Docker: `DATA_DIR=/app/data` (SSD) + `RECORDINGS_DIR=/app/recordings` (HDD),
+  montados desde `./data` y `./recordings` (docker-compose).
+- `server.js` usa las mismas constantes para los estáticos `/videos` y `/processed`
+  y para calcular `original_url` con `path.relative` (URLs relativas).
+- Renombrado en fase 6: `STORAGE_DIR` → `DATA_DIR`, `FTP_ROOT` → `RECORDINGS_DIR`.
 
 ### D4 (fase 0) — Env `FTP_PASSIVE_RANGE`
 Añadido en `ftp.js` (el plan lo sugería "si tocas el archivo de todos modos"). Formato
 `"min-max"` (ej. `"2000-2050"`), default `1024-1050`. Útil en Windows, donde
 Hyper-V/WSL2 pueden reservar el rango 1024–1050 (sección 10 del plan). Valor inválido
 → warning + default.
+- **Docker (fase 6)**: el compose fija `FTP_PASSIVE_RANGE=1024-1027` (4 puertos =
+  4 cámaras máximas simultáneas). Cada conexión PASV necesita su propio puerto;
+  con más cámaras se amplía el rango en compose + mapeo de puertos.
 
 ### D5 (fase 0) — ffmpeg pendiente en la máquina de dev
 `ffmpeg` **no** está en el PATH de la máquina de desarrollo en el momento de la fase 0
@@ -237,6 +246,13 @@ defecto —, solo red interna).
   `go2rtc.exe -config infra/go2rtc/go2rtc.yaml` (el yaml es manual, D17) y
   dejar `GO2RTC_URL=http://127.0.0.1:1984` en el `.env` local.
   go2rtc escucha por defecto en `127.0.0.1:1984`.
+- **Docker (prod)**: `network_mode: host` (no bridge). Razón: los ICE
+  candidates del SDP WebRTC contienen la IP del container (`172.x.x.x`) en
+  bridge mode → el navegador no puede conectar UDP 8555. Con host mode,
+  go2rtc usa la interfaz real del SBC y los candidates salen con la IP LAN
+  correcta. El API lo alcanza en `http://127.0.0.1:1984` (mismo host).
+  No se publican puertos explícitamente: go2rtc escucha 1984 (HTTP/WHEP) y
+  8555/udp (WebRTC media) directamente en la interfaz del SBC.
 - **Alternativa SBC** (corregido tras analizar el repo del firmware
   `roleoroleo/yi-hack-Allwinner-v2`, ver D13): el campo
   `"go2rtc":"yes"` de `/cgi-bin/status.json` **solo indica que el binario
@@ -251,12 +267,13 @@ defecto —, solo red interna).
   del repo consumiendo RTSP :554 de la cámara.
 
 ### D12 (fase 3) — Criterios [INTEG]/[SBC] del live view: DEFERRED
-- `[INTEG]` compose completo con solo puertos 3000/21/1024-1050 publicados
-  al host: **DEFERRED-TO-INTEGRATION** (verificar en la fase de integración
-  contra el stack Docker real; `docker-compose.yml` ya lo define así).
+- `[INTEG]` compose completo con puertos 3000/21/1024-1027 (API+FTP) y
+  1883 (Mosquitto LAN) publicados al host; go2rtc en `network_mode: host`
+  (escucha 1984 + 8555/udp directamente): **VERIFIED** (fase 6, SBC Debian).
  - `[INTEG]`/`[SBC]` reproducción WebRTC real en navegador (stream en vivo):
-   **DEFERRED-TO-INTEGRATION** / **DEFERRED-TO-SBC**. En dev se verifica el
-   proxy con un stub HTTP (`scripts/verify-stream-proxy.js`), no con cámara real.
+    **VERIFIED** (fase 6). Requiere `network_mode: host` en go2rtc para que
+    los ICE candidates salgan con la IP LAN real del SBC. En dev se verifica
+    el proxy con un stub HTTP (`scripts/verify-stream-proxy.js`).
 
 ### D13 (fase 3) — RTSP server program de la cámara (RTSP_ALT): estándar por defecto, configurable
 
@@ -560,10 +577,13 @@ los clips, así que él determina `FTP_HOST` (su IP LAN),
 de la cámara, que es `videos.camera_name` en la BD). Ver §12.4-12.6 de
 `docs/CAMERA-CGI-REFERENCE.md`.
 
-- **IP del NVR** (`getNvrPublicIp()` en `ftp.js`): env opcional
-  `NVR_PUBLIC_IP` → primera IPv4 no-internal de `os.networkInterfaces()`
-  (excluye loopback/IPv6) → fallback `127.0.0.1`. El override existe para
-  NVRs multi-homed / NAT / DMZ.
+- **IP del NVR** (`getNvrPublicIp()` en `ftp.js`): env `NVR_PUBLIC_IP` →
+  primera IPv4 no-internal de `os.networkInterfaces()` (excluye loopback/IPv6)
+  → fallback `127.0.0.1`. **En Docker es OBLIGATORIO**: el container ve la IP
+  interna del bridge (`172.x.x.x`), no la IP LAN del host, así que la
+  auto-detección falla silenciosamente y las cámaras recibirían una IP
+  inalcanzable. El usuario debe fijar `NVR_PUBLIC_IP` en el `.env` con la IP
+  LAN real del SBC (ej. `192.168.1.100`).
 - **Backend** (`routes/storage.js`): `GET .../storage/ftp` devuelve
   `suggested` (los 4 derivados) + `in_sync` (¿los fijos actuales de la
   cámara coinciden?). `POST .../storage/ftp` acepta SOLO switches
@@ -692,6 +712,61 @@ privilegiado): parchear `ftppush.sh` en la SD de la cámara en sus 4 sitios
 ejemplo en `docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md` §5.2.1) + `FTP_PORT` en
 el NVR. Opción más limpia a largo plazo: key `FTP_PORT` en `system.conf` +
 `ftppush.sh` que la lea (cambiable desde la Web UI).
+
+### D26 (yi-api) — PUBLIC_DIR + SPA fallback: un solo puerto en producción
+
+El frontend Angular se compila como estáticos y el API Express los sirve
+directamente. En Docker el build de Angular vive en `/app/public`; en dev
+vive en `apps/api/src/public` (generado por `npm run build:web`).
+
+- `apps/api/src/server.js`:
+  - `const PUBLIC_DIR = process.env.PUBLIC_DIR || path.join(__dirname, 'public')`
+  - `express.static(PUBLIC_DIR)` con `setHeaders` → `index.html` recibe
+    `Cache-Control: no-cache` (los assets hashados de Angular ya traen
+    `Cache-Control: public, max-age=31536000` del builder).
+  - **SPA fallback** (después de todas las rutas API + proxy, antes de
+    `startServices`): `app.get('*', ...)` que sirve `index.html` para
+    cualquier GET que NO empiece por `/api/`, `/stream-proxy/`, `/videos/`,
+    `/processed/` y cuyo `Accept` no sea `application/json`. Esto permite
+    deep links (`/cameras/oficina`) sin 404.
+- `apps/api/Dockerfile` (multi-stage):
+  - Stage `frontend-build`: `node:20-bookworm-slim`, `npm ci`, `ng build`
+    → artefacto en `dist/frontend/browser/`.
+  - Stage final: `node:20-bookworm-slim` + `ffmpeg` + toolchain
+    (`python3 make g++` para `better-sqlite3` en ARM, fase 9).
+    `COPY --from=frontend-build` → `/app/public`.
+    `ENV PUBLIC_DIR=/app/public`.
+  - **NO** `USER node` (el FTP bind en puerto 21 requiere root, D25).
+  - `npm ci --omit=dev` en el stage final.
+- `.dockerignore` (raíz del repo): excluye `node_modules`, `dist`,
+  `.angular`, `storage`, `.env`, `.git`, `apps/api/src/public` (el build
+  de dev no debe contaminar el contexto), `*.db`.
+- **Dev**: `npm run build:web` en `apps/frontend` = `ng build` +
+  `node scripts/build-web.cjs` (copia `dist/frontend/browser` →
+  `../api/src/public`, preserva `mockup/`). El `server.js` ya apunta a
+  `__dirname/public` por defecto, así que no hace falta cambiar nada más.
+- **Status**: `[INTEG]` — verificado nativamente (SPA fallback, deep link,
+  `push/sw.js`, no-cache, API no afectada). Docker build + `compose up`
+  pendiente en máquina Debian.
+
+### D27 (yi-api) — push/sw.js: service worker de Web Push como asset estático
+
+El service worker de push (`/push/sw.js`) es un archivo estático mínimo
+(sin framework) que se registra con scope `/push/` desde el frontend
+(`PushService`). Coexiste con `ngsw` (scope `/`) porque los scopes son
+disjuntos.
+
+- `apps/frontend/public/push/sw.js`:
+  - `push` event handler: parsea `event.data` JSON
+    (`{title, body, icon, url, data}` — contrato de `webpush.js`),
+    muestra `showNotification` con icono por defecto
+    `/icons/icon-192x192.png`.
+  - `notificationclick` event handler: cierra la notificación, abre/foca
+    el `url` del payload (o `/` si no hay).
+- Se sirve como cualquier asset estático (el `express.static` de
+  `PUBLIC_DIR` lo cubre). No necesita ruta API.
+- **Status**: `[INTEG]` — verificado nativamente (200, contenido correcto).
+  Registro + push real pendiente en integración.
 
 ## Notas durante el desarrollo (live view)
 

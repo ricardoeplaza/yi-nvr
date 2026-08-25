@@ -38,7 +38,7 @@ The result is a single project that covers the whole job the Xiaomi ecosystem us
 
 | Layer | Technology |
 |---|---|
-| Backend | Node.js 20, Express 5 |
+| Backend | Node.js 26, Express 5 |
 | Database | SQLite via `better-sqlite3` |
 | FTP | `ftp-srv` + `chokidar` |
 | Video processing | `fluent-ffmpeg` + system `ffmpeg` |
@@ -54,7 +54,9 @@ The result is a single project that covers the whole job the Xiaomi ecosystem us
 yi-nvr/
 ├── AGENT-PLAN.md            # execution plan: phases, criteria, decisions
 ├── .env.example
+├── docker-compose.yml
 ├── infra/
+│   ├── cameras.json         # camera registry (bind-mounted, gitignored)
 │   ├── mosquitto/           # broker config
 │   └── go2rtc/              # stream config (manual; .example template)
 ├── apps/
@@ -68,7 +70,8 @@ yi-nvr/
 │   │       ├── push/        # Web Push fan-out
 │   │       └── routes/      # videos, cameras, timeline, push, stream
 │   └── frontend/            # Angular PWA
-├── storage/                 # Docker volume target (never committed)
+├── data/                    # DB + processed (dev + Docker volume; SSD recommended)
+├── recordings/              # incoming clips (dev + Docker volume; HDD recommended)
 └── docs/
     ├── ARCHITECTURE.md      # stack, environments, decision log
     └── API.md               # full API reference
@@ -87,30 +90,55 @@ yi-nvr/
 
 ```bash
 cp .env.example .env
+cp infra/cameras.json.example infra/cameras.json   # then edit: your cameras
 cd apps/api
 npm install
 npm start
 ```
 
-The server listens on `http://localhost:3000` (HTTP API + static assets) and `21` (FTP, passive range `1024–1050`). Port `21` is the one the camera hardcodes in `ftppush.sh` (D25); it is a privileged port, so run the API as admin/root (or set `FTP_PORT` to an alternative port and patch `ftppush.sh` on the camera SD — see `docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md` §5.2.1).
+The server listens on `http://localhost:3000` (HTTP API + static assets) and `21` (FTP, passive range `1024–1027`). Port `21` is the one the camera hardcodes in `ftppush.sh` (D25); it is a privileged port, so run the API as admin/root (or set `FTP_PORT` to an alternative port and patch `ftppush.sh` on the camera SD — see `docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md` §5.2.1).
 
 ### Camera config (first run)
 
 ```bash
-cp apps/api/src/config/cameras.json.example apps/api/src/config/cameras.json
+cp infra/cameras.json.example infra/cameras.json
 ```
 
-- `cameras.json` is the single source of truth for the backend (LAN IPs, FTP dir, MQTT prefix/topics). It is **gitignored** — fill in your real values.
+- `infra/cameras.json` is the single source of truth for the backend (LAN IPs, FTP dir, MQTT prefix/topics). It is **gitignored** — fill in your real values.
 - `infra/go2rtc/go2rtc.yaml` is **manual** (template: `infra/go2rtc/go2rtc.yaml.example` — copy it and fill in real values). It is **gitignored** and the API never writes to it. One stream per camera `id` from `cameras.json`; use the `ffmpeg:` prefix to normalize a source (e.g. H.265 → H.264). For Tuya/Smart Life cameras, put the full `tuya://` URL (device id, email, password) as a stream source.
 
-### Docker (full stack)
+### Deploy
 
 ```bash
-cp .env.example .env   # fill in VAPID keys and API_AUTH_TOKEN
+# 1. Configure
+cp .env.example .env
+# Edit .env → set NVR_PUBLIC_IP, VAPID keys, API_AUTH_TOKEN
+
+cp infra/cameras.json.example infra/cameras.json
+# Edit → add your cameras (id, host, ftp_dir, mqtt_prefix)
+
+cp infra/go2rtc/go2rtc.yaml.example infra/go2rtc/go2rtc.yaml
+# Edit → add one RTSP stream per camera
+
+cp infra/mosquitto/mosquitto.conf.example infra/mosquitto/mosquitto.conf
+# Edit if needed (listeners, auth)
+
+# 2. Run (pulls the latest image from GHCR)
 docker compose up -d
 ```
 
-Only port `3000` (HTTP) and the FTP ports are exposed; Mosquitto and go2rtc stay on the internal network.
+**`NVR_PUBLIC_IP`** must be the LAN IP of the machine running the stack (e.g. `192.168.1.100`). Cameras use it for FTP upload; the browser uses it for WebRTC media.
+
+**Exposed ports**: `3000` (HTTP/API), `21` + `1024-1027` (FTP), `1883` (Mosquitto — cameras connect from LAN). `go2rtc` listens directly on `1984` (WHEP) and `8555/udp` (WebRTC media).
+
+#### Storage
+
+| Directory | Purpose | Recommended |
+|-----------|---------|-------------|
+| `./data/` | SQLite DB + processed media (thumbnails, previews) | SSD |
+| `./recordings/` | Raw clips from cameras (one subdir per `ftp_dir`) | HDD |
+
+In development (`npm start`) the app uses the same `./data/` and `./recordings/` directories at the repo root (created automatically, gitignored) — data always lives outside the source tree, in both dev and Docker.
 
 ## API (summary)
 

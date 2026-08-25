@@ -1,0 +1,19 @@
+# Mosquitto 2 — broker MQTT de yi-nvr
+#
+# Dos accesos:
+#   1. Red interna (compose): el API se conecta a mqtt://mosquitto:1883
+#   2. LAN: las cámaras (yi-hack) se conectan a mqtt://<IP-NVR>:1883
+#      (puerto publicado al host)
+
+listener 1883
+protocol mqtt
+
+# Sin usuarios: se permite el acceso anónimo (red doméstica cerrada detrás
+# de Tailscale/Headscale; el broker no se expone a internet).
+# OJO: Mosquitto 2 deniega el anónimo por defecto → hay que habilitarlo.
+allow_anonymous true
+
+log_dest stdout
+log_type error
+log_type warning
+log_type notice

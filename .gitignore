@@ -6,11 +6,15 @@ node_modules/
 .env.*
 !.env.example
 
-# Camera config (real LAN IPs / credentials, never in git — use the .example files)
-apps/api/src/config/cameras.json
+# Runtime config (real values, never in git — use the .example files)
+infra/cameras.json
 infra/go2rtc/go2rtc.yaml
+infra/mosquitto/mosquitto.conf
 
 # Storage: videos, processed media, SQLite DB (real data, never in git)
+# Dev y Docker comparten ./data y ./recordings en la raíz del repo.
+data/
+recordings/
 apps/api/src/storage/
 storage/
 *.db
