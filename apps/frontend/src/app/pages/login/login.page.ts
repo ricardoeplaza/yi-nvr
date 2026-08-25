@@ -7,7 +7,7 @@ import { Router } from '@angular/router';
   template: `
     <div class="login-screen">
       <div class="login-card">
-        <div class="login-icon">📹</div>
+        <img class="login-icon" src="icons/icon.svg" alt="Yi NVR" />
         <h1>Yi NVR</h1>
         <p class="login-subtitle">Inicia sesión para continuar</p>
         <button class="login-btn" (click)="login()">Entrar</button>
