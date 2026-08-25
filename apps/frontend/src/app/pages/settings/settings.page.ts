@@ -28,6 +28,9 @@ type PushStatus = 'inactive' | 'active' | 'error' | 'loading';
               <span class="push-status">Activando…</span>
             } @else if (pushStatus() === 'error') {
               <span class="push-status error">Error</span>
+              @if (pushError() !== '') {
+                <span class="push-error">{{ pushError() }}</span>
+              }
               <button class="btn btn-primary" (click)="activatePush()">Reintentar</button>
             } @else {
               <span class="push-status">No activadas</span>
@@ -60,6 +63,7 @@ export class SettingsPage implements OnInit {
   private pushService = inject(PushService);
 
   pushStatus = signal<PushStatus>('inactive');
+  pushError = signal('');
 
   async ngOnInit() {
     const reg = await navigator.serviceWorker.getRegistration('/push/');
@@ -75,11 +79,28 @@ export class SettingsPage implements OnInit {
 
   async activatePush() {
     this.pushStatus.set('loading');
+    this.pushError.set('');
     try {
-      await this.pushService.registerPush();
-      this.pushStatus.set('active');
+      const result = await this.pushService.registerPush();
+      if (result.ok) {
+        this.pushStatus.set('active');
+      } else {
+        this.pushError.set(this.errorFor(result.reason));
+        this.pushStatus.set('error');
+      }
     } catch {
+      this.pushError.set('No se pudo completar la suscripción');
       this.pushStatus.set('error');
+    }
+  }
+
+  private errorFor(reason: string): string {
+    switch (reason) {
+      case 'permission-denied': return 'Permiso de notificaciones denegado';
+      case 'no-vapid-key': return 'El servidor no expone la clave VAPID';
+      case 'sw-registration': return 'No se pudo registrar el service worker';
+      case 'subscription': return 'No se pudo completar la suscripción';
+      default: return 'Error desconocido';
     }
   }
 

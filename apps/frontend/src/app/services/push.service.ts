@@ -3,6 +3,10 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { Observable } from 'rxjs';
 
+export type PushRegistrationResult =
+  | { ok: true }
+  | { ok: false; reason: 'permission-denied' | 'no-vapid-key' | 'sw-registration' | 'subscription' };
+
 @Injectable({ providedIn: 'root' })
 export class PushService {
   private readonly http = inject(HttpClient);
@@ -21,34 +25,41 @@ export class PushService {
     return this.http.post<{ success: boolean }>('/api/push/unsubscribe', subscription);
   }
 
-  async registerPush(): Promise<void> {
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        console.error('Notification permission denied');
-        return;
-      }
+  async registerPush(): Promise<PushRegistrationResult> {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      return { ok: false, reason: 'permission-denied' };
+    }
 
-      const registration = await navigator.serviceWorker.register('/push/sw.js', {
+    let registration: ServiceWorkerRegistration;
+    try {
+      registration = await navigator.serviceWorker.register('/push/sw.js', {
         scope: '/push/',
       });
+    } catch (error) {
+      console.error('Push SW registration failed', error);
+      return { ok: false, reason: 'sw-registration' };
+    }
 
-      const keyResponse = await firstValueFrom(this.getVapidKey());
-      if (!keyResponse.success || !keyResponse.publicKey) {
-        console.error('No VAPID public key available');
-        return;
-      }
+    const keyResponse = await firstValueFrom(this.getVapidKey());
+    if (!keyResponse.success || !keyResponse.publicKey) {
+      console.error('No VAPID public key available');
+      return { ok: false, reason: 'no-vapid-key' };
+    }
 
-      const applicationServerKey = urlBase64ToUint8Array(keyResponse.publicKey);
+    const applicationServerKey = urlBase64ToUint8Array(keyResponse.publicKey);
+    try {
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey,
       });
-
       await firstValueFrom(this.subscribe(subscription));
     } catch (error) {
-      console.error('Push registration failed', error);
+      console.error('Push subscription failed', error);
+      return { ok: false, reason: 'subscription' };
     }
+
+    return { ok: true };
   }
 }
 

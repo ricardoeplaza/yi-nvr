@@ -57,6 +57,13 @@
       &.active { color: var(--green); }
       &.error { color: var(--red); }
     }
+
+    .push-error {
+      flex: 1;
+      font-size: 11px;
+      color: var(--red);
+      text-align: right;
+    }
   }
 }
 
