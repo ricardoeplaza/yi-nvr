@@ -1,0 +1,148 @@
+<div class="gallery">
+  <header class="gallery-header">
+    <h1>Grabaciones</h1>
+  </header>
+
+  <div class="filter-bar">
+    <input
+      class="search-input"
+      type="search"
+      placeholder="Buscar por nombre o cámara…"
+      [value]="searchInput()"
+      (input)="onSearchInput($event)"
+      aria-label="Buscar"
+    />
+    <select class="filter-select" [value]="cameraFilter()" (change)="onCameraChange($event)" aria-label="Cámara">
+      <option value="">Todas las cámaras</option>
+      @for (cam of cameras(); track cam.id) {
+        <option [value]="cam.name">{{ cam.name }}</option>
+      }
+    </select>
+    <div class="date-range">
+      <input type="date" [value]="startDate()" (change)="onStartDateChange($event)" aria-label="Desde" />
+      <span class="date-sep">—</span>
+      <input type="date" [value]="endDate()" (change)="onEndDateChange($event)" aria-label="Hasta" />
+    </div>
+    <label class="fav-toggle">
+      <input type="checkbox" [checked]="favoritesOnly()" (change)="onFavoritesChange($event)" />
+      <span>Solo favoritos</span>
+    </label>
+    @if (hasFilters()) {
+      <button class="clear-btn" (click)="clearFilters()">Limpiar</button>
+    }
+  </div>
+
+  <section class="purge-panel">
+    <div class="section-head">
+      <h2>Retención</h2>
+      <button class="ghost-btn" (click)="purgeOpen.set(!purgeOpen())" [attr.aria-expanded]="purgeOpen()">
+        {{ purgeOpen() ? 'Ocultar' : 'Mostrar' }}
+      </button>
+    </div>
+    @if (purgeOpen()) {
+      <div class="purge-controls">
+        <select [value]="purgeScope()" (change)="onPurgeScopeChange($event)" aria-label="Alcance del borrado">
+          <option value="day">De más de un día</option>
+          <option value="week">De más de 1 semana</option>
+          <option value="month">De más de 30 días</option>
+          <option value="range">Rango personalizado</option>
+        </select>
+        @if (purgeScope() === 'range') {
+          <input type="date" [value]="purgeFrom()" (change)="onPurgeFromChange($event)" aria-label="Desde" />
+          <span class="date-sep">—</span>
+          <input type="date" [value]="purgeTo()" (change)="onPurgeToChange($event)" aria-label="Hasta" />
+        }
+        @if (purgeExpected() !== null) {
+          <p class="purge-warning">Se borrarán {{ purgeExpected() }} videos (los favoritos están excluidos)</p>
+        }
+        <button class="danger-btn" [disabled]="purging() || purgeExpected() === null" (click)="onPurge()">
+          {{ purging() ? 'Borrando…' : 'Purgar' }}
+        </button>
+      </div>
+      @if (purgeError()) {
+        <p class="inline-error">{{ purgeError() }}</p>
+      }
+      @if (purgeOutcome()) {
+        <div class="purge-result" [class.partial]="purgeOutcome()!.failed > 0">
+          @if (purgeOutcome()!.expected === 0) {
+            <p>No había videos en ese alcance.</p>
+          } @else {
+            <p>Purgados {{ purgeOutcome()!.purged }} de {{ purgeOutcome()!.expected }} videos.</p>
+            @if (purgeOutcome()!.failed > 0) {
+              <p class="warn">{{ purgeOutcome()!.failed }} no pudieron purgarse.</p>
+            }
+          }
+        </div>
+      }
+    }
+  </section>
+
+  @if (loading()) {
+    <div class="loading">Cargando…</div>
+  } @else if (videos().length) {
+    <div class="video-grid">
+      @for (vid of videos(); track vid.id) {
+        <article class="video-card" [class.fav]="vid.favorite" (mouseenter)="onCardEnter(vid)">
+          <div class="thumb">
+            @if (vid.thumbnail_url || vid.preview_url) {
+              <img [src]="cardSrc(vid)" alt="" loading="lazy" />
+            } @else {
+              <div class="thumb-fallback">🎬</div>
+            }
+            <span class="duration-badge">{{ vid.duration | formatDuration }}</span>
+            @if (vid.favorite) {
+              <span class="fav-flag" title="Favorito">★</span>
+            }
+          </div>
+          <div class="card-body">
+            @if (renamingId() === vid.id) {
+              <input
+                class="rename-input"
+                type="text"
+                [value]="renameValue()"
+                (input)="onRenameInput($event)"
+                (keydown.enter)="commitRename(vid)"
+                (keydown.escape)="cancelRename()"
+                (blur)="commitRename(vid)"
+                aria-label="Nuevo nombre"
+              />
+              @if (renameError()) {
+                <p class="card-error">{{ renameError() }}</p>
+              }
+            } @else {
+              <p class="card-title" [title]="displayName(vid)">{{ displayName(vid) }}</p>
+            }
+            <p class="card-meta">
+              {{ vid.camera_name }} · {{ vid.timestamp | formatDate }} · {{ vid.duration | formatDuration }} · {{ formatSize(vid.file_size) }}
+            </p>
+            <div class="card-actions">
+              <button
+                class="icon-btn"
+                [class.active]="vid.favorite"
+                [title]="vid.favorite ? 'Quitar de favoritos' : 'Marcar favorito'"
+                (click)="toggleFavorite(vid)"
+              >
+                {{ vid.favorite ? '★' : '☆' }}
+              </button>
+              <button class="icon-btn" title="Renombrar" (click)="startRename(vid)">✏️</button>
+              <button class="icon-btn danger" title="Eliminar" (click)="deleteVideo(vid)">🗑️</button>
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+    @if (loadingMore()) {
+      <div class="loading">Cargando más…</div>
+    } @else if (hasMore()) {
+      <div class="load-more-row">
+        <button class="btn" (click)="loadMore()">Cargar más</button>
+      </div>
+    }
+  } @else {
+    @if (hasFilters()) {
+      <yi-empty-state icon="🔍" title="Sin resultados" subtitle="Ninguna grabación coincide con los filtros" />
+    } @else {
+      <yi-empty-state icon="🎬" title="Sin grabaciones" subtitle="Ajusta los filtros o espera nuevas grabaciones" />
+    }
+  }
+</div>
