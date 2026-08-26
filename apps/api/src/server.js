@@ -13,6 +13,7 @@
  *  - GET /api/health          - Estado del servicio (DB + FTP)
  *  - GET /api/videos          - Lista de videos con filtros
  *  - GET /api/videos/:id      - Detalle de un video específico
+ *  - POST /api/videos/:id/favorite - Marca/desmarca un video como favorito
  *  - DELETE /api/videos/:id   - Elimina un video y sus archivos
  *  - GET /api/cameras         - Lista de cámaras registradas con estadísticas
  *  - POST /api/cameras/:id/reload - Recarga cameras.json
@@ -305,6 +306,7 @@ async function startServices() {
             console.log(`         GET /api/health`);
             console.log(`         GET /api/videos`);
             console.log(`         GET /api/videos/:id`);
+            console.log(`         POST /api/videos/:id/favorite`);
             console.log(`         GET /api/cameras`);
             console.log(`         POST /api/cameras/:id/reload`);
             console.log(`         POST /api/cameras/:id/{power,led,night-vision,rec-mode}`);

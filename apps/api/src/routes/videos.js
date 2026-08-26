@@ -6,13 +6,14 @@
  * Endpoints:
  *  - GET /videos    - Lista de videos con filtros
  *  - GET /videos/:id - Detalle de un video específico
+ *  - POST /videos/:id/favorite - Marca/desmarca un video como favorito
  *  - DELETE /videos/:id - Elimina un video y sus archivos físicos
  */
 
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { getVideos, getVideoById, deleteVideo } = require('../database');
+const { getVideos, getVideoById, setVideoFavorite, deleteVideo } = require('../database');
 const { DATA_DIR, RECORDINGS_DIR } = require('../paths');
 
 // Directorios de almacenamiento (mismo criterio que server.js, vía paths.js)
@@ -80,6 +81,7 @@ router.get('/videos', (req, res) => {
         // Añadimos URLs accesibles para cada video
         const videosWithUrls = videos.map(video => ({
             ...video,
+            favorite: Boolean(video.favorite),
             original_url: buildOriginalUrl(video.original_path),
             thumbnail_url: video.thumbnail_path ? `/processed/${path.basename(video.thumbnail_path)}` : null,
             preview_url: video.preview_path ? `/processed/${path.basename(video.preview_path)}` : null
@@ -114,6 +116,7 @@ router.get('/videos/:id', (req, res) => {
         // Añadimos URLs accesibles
         const videoWithUrls = {
             ...video,
+            favorite: Boolean(video.favorite),
             original_url: buildOriginalUrl(video.original_path),
             thumbnail_url: video.thumbnail_path ? `/processed/${path.basename(video.thumbnail_path)}` : null,
             preview_url: video.preview_path ? `/processed/${path.basename(video.preview_path)}` : null
@@ -126,6 +129,35 @@ router.get('/videos/:id', (req, res) => {
 
     } catch (error) {
         console.error('[API] Error al obtener video:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * POST /api/videos/:id/favorite
+ *
+ * Marca o desmarca un video como favorito.
+ * Body: { "favorite": true | false }
+ */
+router.post('/videos/:id/favorite', (req, res) => {
+    try {
+        const { favorite } = req.body || {};
+        if (typeof favorite !== 'boolean') {
+            return res.status(400).json({ success: false, error: 'favorite debe ser booleano' });
+        }
+
+        const id = parseInt(req.params.id, 10);
+        const video = getVideoById(id);
+
+        if (!video) {
+            return res.status(404).json({ success: false, error: 'Video no encontrado' });
+        }
+
+        setVideoFavorite(id, favorite);
+
+        res.json({ success: true, favorite });
+    } catch (error) {
+        console.error('[API] Error al cambiar favorito:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 });

@@ -16,6 +16,7 @@
  *  - preview_path: Ruta del preview WebP animado
  *  - duration: Duración del video en segundos
  *  - file_size: Tamaño del archivo en bytes
+ *  - favorite: Si el clip está marcado como favorito (0/1)
  */
 
 const Database = require('better-sqlite3');
@@ -54,10 +55,18 @@ function initSchema() {
             preview_path TEXT,
             duration REAL,
             file_size INTEGER,
+            favorite INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `;
     db.exec(createTable);
+
+    // Migración defensiva: añade la columna favorite a BDs creadas antes de
+    // que existiera (CREATE TABLE IF NOT EXISTS no altera tablas existentes).
+    const videoCols = db.prepare('PRAGMA table_info(videos)').all().map(c => c.name);
+    if (!videoCols.includes('favorite')) {
+        db.exec('ALTER TABLE videos ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0');
+    }
 
     // Índices para búsquedas rápidas por cámara y fecha
     db.exec(`CREATE INDEX IF NOT EXISTS idx_videos_camera ON videos(camera_name)`);
@@ -220,6 +229,18 @@ function updateVideo(id, updates) {
     const query = `UPDATE videos SET ${fields} WHERE id = @id`;
     const stmt = db.prepare(query);
     stmt.run({ ...updates, id });
+}
+
+/**
+ * Marca o desmarca un video como favorito.
+ * @param {number} id - ID del video
+ * @param {boolean} favorite - true para marcar, false para desmarcar
+ * @returns {boolean} - True si se actualizó, false si no existía
+ */
+function setVideoFavorite(id, favorite) {
+    const stmt = db.prepare('UPDATE videos SET favorite = ? WHERE id = ?');
+    const result = stmt.run(favorite ? 1 : 0, id);
+    return result.changes > 0;
 }
 
 /**
@@ -395,6 +416,7 @@ module.exports = {
     getCameraStats,
     getTimelineData,
     updateVideo,
+    setVideoFavorite,
     deleteVideo,
     upsertPushSubscription,
     getPushSubscription,
