@@ -112,10 +112,24 @@ describe('GalleryPage', () => {
     it('cambiar cámara recarga con el param y offset 0', async () => {
       const fixture = await createPage();
       const c = fixture.componentInstance;
-      c.onCameraChange({ target: { value: 'Cámara 1' } } as unknown as Event);
+      // El select usa ftp_dir (valor crudo, igual que camera_name en la BD),
+      // no el nombre de presentación.
+      c.onCameraChange({ target: { value: 'cam1' } } as unknown as Event);
       const last = getVideosSpy.mock.calls.at(-1)![0];
-      expect(last.camera).toBe('Cámara 1');
+      expect(last.camera).toBe('cam1');
       expect(last.offset).toBe(0);
+      fixture.destroy();
+    });
+
+    it('las opciones del select usan value=ftp_dir y label=name', async () => {
+      const fixture = await createPage();
+      const options = fixture.nativeElement.querySelectorAll(
+        'select[aria-label="Cámara"] option'
+      ) as NodeListOf<HTMLOptionElement>;
+      expect(options[0].value).toBe('');
+      expect(options[0].textContent).toBe('Todas las cámaras');
+      expect(options[1].value).toBe('cam1');
+      expect(options[1].textContent).toBe('Cámara 1');
       fixture.destroy();
     });
 

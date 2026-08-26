@@ -15,7 +15,7 @@
     <select class="filter-select" [value]="cameraFilter()" (change)="onCameraChange($event)" aria-label="Cámara">
       <option value="">Todas las cámaras</option>
       @for (cam of cameras(); track cam.id) {
-        <option [value]="cam.name">{{ cam.name }}</option>
+        <option [value]="cam.ftp_dir">{{ cam.name }}</option>
       }
     </select>
     <div class="date-range">
