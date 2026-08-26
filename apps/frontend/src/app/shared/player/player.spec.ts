@@ -5,6 +5,7 @@ import type { Video } from '../../models/video.model';
 function makeVideo(): Video {
   return {
     id: 1,
+    name: null,
     camera_name: 'cam1',
     timestamp: new Date(2026, 7, 20, 10, 30).toISOString(),
     original_path: '',

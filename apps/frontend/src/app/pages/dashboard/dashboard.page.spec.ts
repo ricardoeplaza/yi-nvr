@@ -26,6 +26,7 @@ function makeCamera(): Camera {
 function makeVideo(id: number, ts: string): Video {
   return {
     id,
+    name: null,
     camera_name: 'cam1',
     timestamp: ts,
     original_path: '',

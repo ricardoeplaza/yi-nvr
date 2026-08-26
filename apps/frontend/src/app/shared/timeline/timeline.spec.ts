@@ -9,6 +9,7 @@ describe('Timeline', () => {
 
   const video: Video = {
     id: 1,
+    name: null,
     camera_name: 'cam1',
     timestamp: new Date().toISOString(),
     original_path: '',
