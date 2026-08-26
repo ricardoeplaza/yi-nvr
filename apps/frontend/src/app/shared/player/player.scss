@@ -310,6 +310,15 @@
       opacity: 1;
     }
   }
+
+  // Autoplay del siguiente clip activo: marcado con el color de acento.
+  &.autoplay-active {
+    color: var(--accent-blue);
+
+    svg {
+      opacity: 1;
+    }
+  }
 }
 
 /* volumen: botón + slider */

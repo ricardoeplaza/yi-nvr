@@ -38,6 +38,10 @@ export class Player implements OnDestroy {
   readonly liveStatus = output<PlayerLiveStatus>();
   // Nuevo (aditivo): el padre decide qué hacer con el clip (p. ej. marcar favorito).
   readonly favorite = output<Video>();
+  // Clip siguiente (solo on-demand): se emite al padre cuando el clip llega al
+  // final Y el autoplay está activo. El padre decide qué clip reproducir a
+  // continuación (p. ej. el siguiente en el timeline).
+  readonly nextVideo = output<Video>();
 
   /* ---------- referencias de template ---------- */
   @ViewChild('videoEl') videoEl?: ElementRef<HTMLVideoElement>;
@@ -56,6 +60,10 @@ export class Player implements OnDestroy {
   readonly isFullscreen = signal(false);
   // Ocultos por defecto: solo aparecen con interacción o en pausa/carga.
   readonly controlsVisible = signal(false);
+  // Autoplay del siguiente clip (on-demand): si está activo, al terminar un clip
+  // se emite nextVideo para que el padre seleccione el siguiente. Si está
+  // desactivado, NO se emite (el clip queda pausado al final).
+  readonly autoplay = signal(true);
   private seeking = false;
 
   /* ---------- estado live ---------- */
@@ -319,6 +327,13 @@ export class Player implements OnDestroy {
     this.favorite.emit(vid);
   }
 
+  // Alterna el autoplay del siguiente clip (on-demand). Activo → al terminar un
+  // clip se emite nextVideo; desactivado → no se emite (clip pausado al final).
+  toggleAutoplay() {
+    this.autoplay.set(!this.autoplay());
+    this.pokeControls();
+  }
+
   /* ---------- controles: captura (solo live) ---------- */
 
   // Captura 100% local: dibuja el frame actual en un <canvas>, toBlob() y
@@ -375,6 +390,16 @@ export class Player implements OnDestroy {
     // En pausa los controles quedan siempre a la vista
     this.controlsVisible.set(true);
     this.clearHideTimer();
+  }
+
+  // Fin natural del clip (on-demand): si el autoplay está activo se emite
+  // nextVideo para que el padre avance al clip siguiente. Si está desactivado,
+  // no se emite nada (el clip queda pausado al final).
+  onVideoEnded() {
+    if (!this.isOnDemandMode()) return;
+    if (!this.autoplay()) return;
+    const vid = this.video();
+    if (vid) this.nextVideo.emit(vid);
   }
 
   onTimeUpdate() {

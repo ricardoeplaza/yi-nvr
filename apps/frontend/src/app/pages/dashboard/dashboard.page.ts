@@ -25,7 +25,11 @@ function pad2(n: number): string {
           <p>Configura cámaras en cameras.json</p>
         </div>
       } @else {
-        <yi-player [video]="selectedVideo()" [title]="playerTitle()"></yi-player>
+        <yi-player
+          [video]="selectedVideo()"
+          [title]="playerTitle()"
+          (nextVideo)="onVideoEnded($event)"
+        ></yi-player>
 
         <yi-timeline
           [videos]="videos()"
@@ -138,6 +142,21 @@ export class DashboardPage implements OnInit, OnDestroy {
   selectVideo(vid: Video) {
     if (this.destroyed) return;
     this.selectedVideo.set(vid);
+  }
+
+  // Autoplay: al terminar un clip, avanza al siguiente más nuevo siguiendo el
+  // orden natural del timeline (izquierda → derecha = cronológico). La lista
+  // está ordenada DESC (más reciente primero), así que el "siguiente más nuevo"
+  // es el índice anterior. Se detiene en el clip más reciente (índice 0).
+  onVideoEnded(vid: Video) {
+    if (this.destroyed) return;
+    const list = this.videos();
+    const idx = list.findIndex((v) => v.id === vid.id);
+    if (idx < 0) return;
+    const nextIdx = idx - 1;
+    if (nextIdx >= 0) {
+      this.selectVideo(list[nextIdx]);
+    }
   }
 
 }

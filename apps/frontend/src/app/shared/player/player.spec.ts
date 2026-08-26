@@ -253,6 +253,50 @@ describe('Player', () => {
         expect(host.querySelector('button.fav-active')).toBeNull();
       });
     });
+
+    describe('autoplay del siguiente clip', () => {
+      function autoButton(): HTMLElement {
+        return host.querySelector('button[aria-label="Desactivar reproducción automática"], button[aria-label="Activar reproducción automática"]') as HTMLElement;
+      }
+
+      it('muestra el botón de autoplay en modo on-demand, activo por defecto', () => {
+        fixture.componentRef.setInput('video', makeVideo());
+        fixture.detectChanges();
+        const btn = autoButton();
+        expect(btn).toBeTruthy();
+        expect(component.autoplay()).toBe(true);
+        expect(btn.classList.contains('autoplay-active')).toBe(true);
+      });
+
+      it('al terminar un clip con autoplay activo emite nextVideo con el Video', () => {
+        const vid = makeVideo();
+        fixture.componentRef.setInput('video', vid);
+        fixture.detectChanges();
+        let next: Video | null = null;
+        component.nextVideo.subscribe((v) => (next = v));
+        component.onVideoEnded();
+        expect(next).toBe(vid);
+      });
+
+      it('toggleAutoplay desactiva el autoplay y el botón pierde el marcado', () => {
+        fixture.componentRef.setInput('video', makeVideo());
+        fixture.detectChanges();
+        component.toggleAutoplay();
+        fixture.detectChanges();
+        expect(component.autoplay()).toBe(false);
+        expect(host.querySelector('button.autoplay-active')).toBeNull();
+      });
+
+      it('con autoplay desactivado NO emite nextVideo al terminar el clip', () => {
+        fixture.componentRef.setInput('video', makeVideo());
+        fixture.detectChanges();
+        component.toggleAutoplay();
+        let next: Video | null = null;
+        component.nextVideo.subscribe((v) => (next = v));
+        component.onVideoEnded();
+        expect(next).toBeNull();
+      });
+    });
   });
 
   describe('modo live', () => {
