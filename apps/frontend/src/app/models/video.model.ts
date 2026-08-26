@@ -1,5 +1,6 @@
 export interface Video {
   id: number;
+  name: string | null;
   camera_name: string;
   timestamp: string;
   original_path: string;

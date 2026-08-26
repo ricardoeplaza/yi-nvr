@@ -11,16 +11,55 @@ export class VideoService {
     camera?: string;
     startDate?: string;
     endDate?: string;
+    q?: string;
+    favorite?: 0 | 1;
     limit?: number;
+    offset?: number;
   }): Observable<{ success: boolean; count: number; data: Video[] }> {
     let httpParams = new HttpParams();
     if (params.camera !== undefined) httpParams = httpParams.set('camera', params.camera);
     if (params.startDate !== undefined) httpParams = httpParams.set('startDate', params.startDate);
     if (params.endDate !== undefined) httpParams = httpParams.set('endDate', params.endDate);
+    if (params.q !== undefined) httpParams = httpParams.set('q', params.q);
+    if (params.favorite !== undefined) httpParams = httpParams.set('favorite', params.favorite.toString());
     if (params.limit !== undefined) httpParams = httpParams.set('limit', params.limit.toString());
+    if (params.offset !== undefined) httpParams = httpParams.set('offset', params.offset.toString());
     return this.http.get<{ success: boolean; count: number; data: Video[] }>('/api/videos', {
       params: httpParams,
     });
+  }
+
+  countVideos(params: {
+    camera?: string;
+    startDate?: string;
+    endDate?: string;
+    q?: string;
+    favorite?: 0 | 1;
+  }): Observable<{ success: boolean; count: number }> {
+    let httpParams = new HttpParams();
+    if (params.camera !== undefined) httpParams = httpParams.set('camera', params.camera);
+    if (params.startDate !== undefined) httpParams = httpParams.set('startDate', params.startDate);
+    if (params.endDate !== undefined) httpParams = httpParams.set('endDate', params.endDate);
+    if (params.q !== undefined) httpParams = httpParams.set('q', params.q);
+    if (params.favorite !== undefined) httpParams = httpParams.set('favorite', params.favorite.toString());
+    return this.http.get<{ success: boolean; count: number }>('/api/videos/count', {
+      params: httpParams,
+    });
+  }
+
+  renameVideo(id: number, name: string | null): Observable<{ success: boolean; video: Video }> {
+    return this.http.patch<{ success: boolean; video: Video }>(`/api/videos/${id}`, { name });
+  }
+
+  purgeVideos(req: {
+    scope: 'day' | 'week' | 'month' | 'range';
+    from?: string;
+    to?: string;
+  }): Observable<{ success: boolean; expected: number; purged: string[]; failed: string[] }> {
+    return this.http.post<{ success: boolean; expected: number; purged: string[]; failed: string[] }>(
+      '/api/videos/purge',
+      req
+    );
   }
 
   getVideo(id: number): Observable<{ success: boolean; data: Video }> {
