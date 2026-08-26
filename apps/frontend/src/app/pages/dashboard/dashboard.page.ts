@@ -28,7 +28,9 @@ function pad2(n: number): string {
         <yi-player
           [video]="selectedVideo()"
           [title]="playerTitle()"
+          [isFavorite]="selectedVideo()?.favorite ?? false"
           (nextVideo)="onVideoEnded($event)"
+          (favorite)="onFavoriteToggle($event)"
         ></yi-player>
 
         <yi-timeline
@@ -54,7 +56,12 @@ function pad2(n: number): string {
                   <div class="pause-ico"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg></div>
                 </div>
                 <div class="ev-mid">
-                  <p class="ev-title">Grabación</p>
+                  <p class="ev-title">
+                    Grabación
+                    @if (vid.favorite) {
+                      <svg class="ev-fav" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.6l5.8-.8Z" /></svg>
+                    }
+                  </p>
                   <p class="ev-sub">{{ fmtVideoDate(vid) }}&nbsp;·&nbsp;<span class="ev-cam">{{ cameraNameOf(vid) }}</span></p>
                 </div>
                 <span class="ev-time">{{ fmtVideoTime(vid) }}</span>
@@ -157,6 +164,30 @@ export class DashboardPage implements OnInit, OnDestroy {
     if (nextIdx >= 0) {
       this.selectVideo(list[nextIdx]);
     }
+  }
+
+  // El player emite el clip al pulsar la estrella (no decide la dirección).
+  // Se actualiza el estado de forma optimista (los dos signals son
+  // independientes: la lista y el clip seleccionado) y se persiste en la BD;
+  // si la API falla, se revierte al estado anterior.
+  onFavoriteToggle(vid: Video) {
+    if (this.destroyed) return;
+    const next = !vid.favorite;
+    this.videos.update((list) => list.map((v) => (v.id === vid.id ? { ...v, favorite: next } : v)));
+    const sel = this.selectedVideo();
+    if (sel?.id === vid.id) {
+      this.selectedVideo.set({ ...sel, favorite: next });
+    }
+    this.videoService.setFavorite(vid.id, next).subscribe({
+      error: () => {
+        if (this.destroyed) return;
+        this.videos.update((list) => list.map((v) => (v.id === vid.id ? { ...v, favorite: vid.favorite } : v)));
+        const s = this.selectedVideo();
+        if (s?.id === vid.id) {
+          this.selectedVideo.set({ ...s, favorite: vid.favorite });
+        }
+      }
+    });
   }
 
 }

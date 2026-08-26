@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import { DashboardPage } from './dashboard.page';
 import { CameraService } from '../../services/camera.service';
@@ -33,6 +33,7 @@ function makeVideo(id: number, ts: string): Video {
     preview_path: '',
     duration: 60,
     file_size: 1024,
+    favorite: false,
     original_url: `https://example.com/clips/clip${id}.mp4`,
     thumbnail_url: '',
     preview_url: '',
@@ -46,13 +47,16 @@ describe('DashboardPage', () => {
   const C = makeVideo(3, '2026-08-20T08:00:00Z');
   const D = makeVideo(4, '2026-08-20T07:00:00Z');
 
+  let setFavoriteSpy: ReturnType<typeof vi.fn>;
+
   async function createPage() {
+    setFavoriteSpy = vi.fn(() => of({ success: true, favorite: true }));
     await TestBed.configureTestingModule({
       imports: [DashboardPage],
       providers: [
         { provide: CameraService, useValue: { getCameras: () => of({ success: true, count: 1, data: [makeCamera()] }) } },
         // Intencionalmente desordenado: el dashboard debe ordenar DESC.
-        { provide: VideoService, useValue: { getVideos: () => of({ success: true, count: 4, data: [D, B, A, C] }) } },
+        { provide: VideoService, useValue: { getVideos: () => of({ success: true, count: 4, data: [D, B, A, C] }), setFavorite: setFavoriteSpy } },
         { provide: StreamService, useValue: {} },
       ],
     }).compileComponents();
@@ -129,6 +133,55 @@ describe('DashboardPage', () => {
       const unknown = makeVideo(99, '2026-08-20T06:00:00Z');
       c.onVideoEnded(unknown);
       expect(c.selectedVideo()?.id).toBe(1); // sigue A
+      fixture.destroy();
+    });
+  });
+
+  describe('favoritos', () => {
+    it('marca el clip como favorito, actualiza el estado y persiste', async () => {
+      const fixture = await createPage();
+      const c = fixture.componentInstance;
+      c.selectVideo(A);
+      c.onFavoriteToggle(c.selectedVideo()!);
+      expect(c.selectedVideo()?.favorite).toBe(true);
+      expect(c.videos().find((v) => v.id === 1)?.favorite).toBe(true);
+      expect(setFavoriteSpy).toHaveBeenCalledWith(1, true);
+      fixture.destroy();
+    });
+
+    it('desmarca si el clip ya estaba marcado', async () => {
+      const fixture = await createPage();
+      const c = fixture.componentInstance;
+      c.selectVideo({ ...A, favorite: true });
+      c.onFavoriteToggle(c.selectedVideo()!);
+      expect(c.selectedVideo()?.favorite).toBe(false);
+      expect(c.videos().find((v) => v.id === 1)?.favorite).toBe(false);
+      expect(setFavoriteSpy).toHaveBeenCalledWith(1, false);
+      fixture.destroy();
+    });
+
+    it('muestra la estrella en el listado al marcar favorito y la quita al desmarcar', async () => {
+      const fixture = await createPage();
+      const c = fixture.componentInstance;
+      expect(fixture.nativeElement.querySelector('.ev-fav')).toBeNull();
+      c.selectVideo(A);
+      c.onFavoriteToggle(c.selectedVideo()!);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.ev-fav')).toBeTruthy();
+      c.onFavoriteToggle(c.selectedVideo()!);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.ev-fav')).toBeNull();
+      fixture.destroy();
+    });
+
+    it('revierte el estado optimista si la API falla', async () => {
+      const fixture = await createPage();
+      setFavoriteSpy.mockReturnValue(throwError(() => new Error('boom')));
+      const c = fixture.componentInstance;
+      c.selectVideo(A);
+      c.onFavoriteToggle(c.selectedVideo()!);
+      expect(c.selectedVideo()?.favorite).toBe(false);
+      expect(c.videos().find((v) => v.id === 1)?.favorite).toBe(false);
       fixture.destroy();
     });
   });

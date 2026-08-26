@@ -12,6 +12,7 @@ function makeVideo(): Video {
     preview_path: '',
     duration: 60,
     file_size: 1024,
+    favorite: false,
     original_url: 'https://example.com/clips/clip1.mp4',
     thumbnail_url: '',
     preview_url: '',

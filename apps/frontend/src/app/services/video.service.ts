@@ -27,6 +27,10 @@ export class VideoService {
     return this.http.get<{ success: boolean; data: Video }>(`/api/videos/${id}`);
   }
 
+  setFavorite(id: number, favorite: boolean): Observable<{ success: boolean; favorite: boolean }> {
+    return this.http.post<{ success: boolean; favorite: boolean }>(`/api/videos/${id}/favorite`, { favorite });
+  }
+
   deleteVideo(id: number): Observable<{ success: boolean; message: string }> {
     return this.http.delete<{ success: boolean; message: string }>(`/api/videos/${id}`);
   }

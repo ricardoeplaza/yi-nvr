@@ -7,6 +7,7 @@ export interface Video {
   preview_path: string;
   duration: number;
   file_size: number;
+  favorite: boolean;
   original_url: string;
   thumbnail_url: string;
   preview_url: string;
