@@ -387,3 +387,7 @@ router.delete('/videos/:id', (req, res) => {
 });
 
 module.exports = router;
+
+// Exportado para reuso (GET /cameras enriquece cada cámara con su último
+// clip usando la MISMA construcción de URLs que este router).
+module.exports.videoWithUrls = videoWithUrls;

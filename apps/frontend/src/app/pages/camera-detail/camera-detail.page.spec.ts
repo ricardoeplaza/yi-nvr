@@ -7,8 +7,26 @@ import { CameraService } from '../../services/camera.service';
 import { StreamService } from '../../services/stream.service';
 import { Camera, CameraStatus } from '../../models/camera.model';
 
-const ALL_CAPS = { live_status: true, controls: true, sd: true, wifi: true, system: true, mqtt: true, push: true, videos: true };
-const GENERIC_CAPS = { live_status: false, controls: false, sd: false, wifi: false, system: false, mqtt: false, push: true, videos: true };
+const ALL_CAPS = {
+  live_status: true,
+  controls: true,
+  sd: true,
+  wifi: true,
+  system: true,
+  mqtt: true,
+  push: true,
+  videos: true,
+};
+const GENERIC_CAPS = {
+  live_status: false,
+  controls: false,
+  sd: false,
+  wifi: false,
+  system: false,
+  mqtt: false,
+  push: true,
+  videos: true,
+};
 
 function makeCamera(eco: 'yi-hack' | 'generic'): Camera {
   return {
@@ -21,7 +39,9 @@ function makeCamera(eco: 'yi-hack' | 'generic'): Camera {
     has_videos: true,
     video_count: 12,
     last_video: '2026-08-20T10:00:00Z',
-    mqtt: null
+    mqtt: null,
+    status: null,
+    latest_video: null,
   };
 }
 
@@ -31,7 +51,7 @@ function makeStatus(eco: 'yi-hack' | 'generic'): CameraStatus {
     last_video: '2026-08-20T10:00:00Z',
     push_enabled: true,
     last_event: { event_type: 'motion', received_at: '2026-08-20T10:05:00Z' },
-    last_motion: { event_type: 'motion', received_at: '2026-08-20T10:05:00Z' }
+    last_motion: { event_type: 'motion', received_at: '2026-08-20T10:05:00Z' },
   };
   if (eco === 'generic') {
     return {
@@ -46,7 +66,7 @@ function makeStatus(eco: 'yi-hack' | 'generic'): CameraStatus {
       camera_config: null,
       system_config: null,
       sd: null,
-      ...nvr
+      ...nvr,
     };
   }
   return {
@@ -64,12 +84,12 @@ function makeStatus(eco: 'yi-hack' | 'generic'): CameraStatus {
       mac_addr: 'AA:BB:CC:DD:EE:FF',
       serial_number: 'SN123',
       wlan_essid: 'miwifi',
-      wlan_strength: '-55'
+      wlan_strength: '-55',
     },
     camera_config: { SWITCH_ON: 'yes', LED: 'no', IR: 'yes', SAVE_VIDEO_ON_MOTION: 'yes' },
     system_config: { HTTPD: 'yes' },
     sd: { total_mb: 32768, free_mb: 16000, used_mb: 16768, free_pct: 49 },
-    ...nvr
+    ...nvr,
   };
 }
 
@@ -88,8 +108,9 @@ describe('CameraDetailPage', () => {
       setRecMode: () => of({ success: true, published: true, payload: {} }),
       setGroupPower: () => of({ success: true }),
       setHttpd: () => of({ success: true, httpd: 'yes', applied: 'next_boot' }),
-      setPush: () => (pushError ? throwError(() => pushError) : of({ success: true, push_enabled: false })),
-      rebootCamera: () => of({ success: true, rebooted: true })
+      setPush: () =>
+        pushError ? throwError(() => pushError) : of({ success: true, push_enabled: false }),
+      rebootCamera: () => of({ success: true, rebooted: true }),
     };
   }
 
@@ -103,8 +124,8 @@ describe('CameraDetailPage', () => {
       providers: [
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'cam1' } } } },
         { provide: CameraService, useValue: cameraServiceMock() },
-        { provide: StreamService, useValue: { getStreamInfo: () => of({ success: false }) } }
-      ]
+        { provide: StreamService, useValue: { getStreamInfo: () => of({ success: false }) } },
+      ],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(CameraDetailPage);
@@ -169,7 +190,11 @@ describe('CameraDetailPage', () => {
       const fixture = await createPage(makeCamera('generic'), makeStatus('generic'));
       const component = fixture.componentInstance;
       pushError = {
-        error: { success: false, error: 'la cámara "cam1" es de ecosistema "generic": no admite controles remotos (solo datos del NVR)' }
+        error: {
+          success: false,
+          error:
+            'la cámara "cam1" es de ecosistema "generic": no admite controles remotos (solo datos del NVR)',
+        },
       };
       component.togglePush();
       expect(component.pushEnabled()).toBe(true);

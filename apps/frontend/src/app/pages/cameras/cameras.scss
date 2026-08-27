@@ -1,34 +1,50 @@
-.cameras {
-  padding: 16px 14px 20px;
-  min-height: 100%;
+// Sin min-height: 100vh: .app-main (shell) ya aporta min-height
+// calc(100vh - tab-bar) con su padding-bottom de tab-bar, y el fondo del
+// viewport lo pinta el body (var(--bg)). Repetir 100vh aquí sumaría la
+// altura de la tabbar dos veces (100vh + 64px de padding del shell) y
+// generaría scroll extra.
+.cameras-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding-bottom: calc(var(--tab-bar-h) + 24px);
+  position: relative;
 }
 
-.cameras-header {
-  margin-bottom: 20px;
+.cameras-subtitle {
+  font-size: 13.5px;
+  color: var(--text-dim);
+  margin: 8px 0 0;
+}
 
-  h1 {
-    font-size: 22px;
-    font-weight: 800;
-    margin: 0;
-    color: var(--text);
-  }
+/* ---------------- LISTA ---------------- */
 
-  .cameras-subtitle {
-    font-size: 13px;
-    color: var(--text-dim);
-    margin: 4px 0 0;
-  }
+.cameras {
+  padding: 4px 20px 8px;
 }
 
 .camera-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+
+  > * {
+    min-width: 0;
+  }
+
+  // Ancho de card en 2 columnas = (vw - 40px de padding de .cameras - 14px
+  // de gap) / 2. Con el toggle "Encendido" y la fila de meta, una card
+  // necesita ~200px de ancho mínimo cómodo; eso se alcanza a vw = 454px
+  // (2*200 + 14 + 40). Por debajo, 1 columna.
+  @media (max-width: 453px) {
+    grid-template-columns: 1fr;
+  }
 }
+
+/* ---------------- LOADING ---------------- */
 
 .loading {
   text-align: center;
   color: var(--text-faint);
   font-size: 14px;
-  padding: 20px;
+  padding: 30px;
 }

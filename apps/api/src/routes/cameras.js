@@ -4,7 +4,8 @@
  * Router de la API para la gestión de cámaras (se monta en /api).
  *
  * Endpoints:
- *  - GET /cameras           - Lista de cámaras registradas con estadísticas de videos
+ *  - GET /cameras           - Lista de cámaras registradas con estadísticas
+ *                              de videos, status (yi-hack) y latest_video
  *  - POST /cameras/:id/reload - Recarga el archivo cameras.json completo
  *  - POST /cameras/group/power - Enciende/apaga un grupo de cámaras (MQTT)
  *  - POST /cameras/:id/power - Enciende/apaga la cámara (MQTT, switch_on yes/no)
@@ -23,9 +24,11 @@
 
 const express = require('express');
 const registry = require('../camera-registry');
-const { getCameraStats } = require('../database');
+const { getCameraStats, getLatestVideosByCamera } = require('../database');
 const mqttClient = require('../mqtt/client');
 const commands = require('../mqtt/commands');
+const { buildCameraStatus } = require('../camera-status-service');
+const { videoWithUrls } = require('./videos');
 
 const router = express.Router();
 
@@ -49,9 +52,20 @@ function mqttErrorStatus(error) {
  * GET /api/cameras
  *
  * Obtiene las cámaras registradas en cameras.json (en orden de archivo)
- * enriquecidas con estadísticas de la BD (la BD guarda camera_name = ftp_dir).
+ * enriquecidas con estadísticas de la BD (la BD guarda camera_name =
+ * ftp_dir). Campos ADITIVOS por cámara (no rompen consumidores antiguos):
+ *  - status: para yi-hack, el MISMO objeto que devuelve
+ *    GET /cameras/:id/status (state, http, mqtt, status, camera_config,
+ *    system_config, sd, video_count, last_video, push_enabled, last_event,
+ *    last_motion); para generic, null (el NVR no puede saber si está
+ *    encendida). Las yi-hack se sondean en paralelo (probes HTTP de 3 s
+ *    acotados por AbortSignal en cada una), así la latencia ≈ el probe más
+ *    lento, no la suma de las N.
+ *  - latest_video: último clip de la cámara (ROW_NUMBER por cámara en UN
+ *    solo query a la BD) con las mismas URLs que GET /api/videos
+ *    (videoWithUrls); null si no tiene clips.
  */
-router.get('/cameras', (req, res) => {
+router.get('/cameras', async (req, res) => {
     try {
         const cameras = registry.getAllCameras();
 
@@ -61,14 +75,40 @@ router.get('/cameras', (req, res) => {
             statsByCamera[row.camera_name] = row;
         });
 
+        // Último clip de cada cámara en UN SOLO query (ROW_NUMBER por
+        // camera_name; ver database.getLatestVideosByCamera)
+        const latestByCamera = {};
+        getLatestVideosByCamera(cameras.map(cam => cam.ftp_dir)).forEach(row => {
+            latestByCamera[row.camera_name] = row;
+        });
+
+        // Estado real de las yi-hack en paralelo: cada buildCameraStatus
+        // hace sus 3 probes HTTP en paralelo (3 s de timeout cada uno),
+        // y las cámaras corren entre sí en paralelo también.
+        const yiHackCams = cameras.filter(cam => registry.getEcosystem(cam) === 'yi-hack');
+        const statusByCamera = {};
+        const statusResults = await Promise.allSettled(
+            yiHackCams.map(cam => buildCameraStatus(cam))
+        );
+        statusResults.forEach((result, i) => {
+            if (result.status === 'fulfilled') {
+                statusByCamera[yiHackCams[i].id] = result.value;
+            } else {
+                console.error(`[API] Error al obtener estado de ${yiHackCams[i].id}:`,
+                    result.reason && result.reason.message);
+            }
+        });
+
         const data = cameras.map(cam => {
             const stats = statsByCamera[cam.ftp_dir];
             const mqttState = mqttClient.getCameraMqttState(cam.id);
+            const latest = latestByCamera[cam.ftp_dir];
+            const ecosystem = registry.getEcosystem(cam);
             return {
                 id: cam.id,
                 name: cam.name,
                 host: cam.host,
-                ecosystem: registry.getEcosystem(cam),
+                ecosystem,
                 ftp_dir: cam.ftp_dir,
                 capabilities: cam.capabilities,
                 has_videos: stats ? stats.count > 0 : false,
@@ -76,7 +116,9 @@ router.get('/cameras', (req, res) => {
                 last_video: stats ? stats.last_video : null,
                 mqtt: mqttState
                     ? { online: mqttState.online, lastSeen: mqttState.lastSeen }
-                    : null
+                    : null,
+                status: ecosystem === 'yi-hack' ? (statusByCamera[cam.id] || null) : null,
+                latest_video: latest ? videoWithUrls(latest) : null
             };
         });
 

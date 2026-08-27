@@ -283,6 +283,36 @@ function getCameraStats() {
 }
 
 /**
+ * Último video de cada cámara en UN SOLO query (para el listado de
+ * cámaras: N cámaras → 1 query, no N). ROW_NUMBER por camera_name
+ * ordenado por timestamp DESC (id DESC como desempate) y se queda con
+ * rn = 1 de cada cámara.
+ * @param {string[]} cameraNames - ftp_dirs a consultar (camera_name en la BD)
+ * @returns {Array} - Máximo una fila por cámara (sin la columna auxiliar rn)
+ */
+function getLatestVideosByCamera(cameraNames) {
+    if (!Array.isArray(cameraNames) || cameraNames.length === 0) {
+        return [];
+    }
+    const placeholders = cameraNames.map(() => '?').join(', ');
+    const stmt = db.prepare(`
+        SELECT id, camera_name, name, timestamp, original_path, thumbnail_path,
+               preview_path, duration, file_size, favorite, created_at
+        FROM (
+            SELECT v.*,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY v.camera_name
+                       ORDER BY v.timestamp DESC, v.id DESC
+                   ) AS rn
+            FROM videos v
+            WHERE v.camera_name IN (${placeholders})
+        )
+        WHERE rn = 1
+    `);
+    return stmt.all(...cameraNames);
+}
+
+/**
  * Actualiza un video existente (útil para añadir paths de thumbnail/preview después del procesamiento).
  * @param {number} id - ID del video
  * @param {Object} updates - Campos a actualizar
@@ -479,6 +509,7 @@ module.exports = {
     getVideoById,
     getAllCameras,
     getCameraStats,
+    getLatestVideosByCamera,
     updateVideo,
     setVideoFavorite,
     deleteVideo,

@@ -21,6 +21,8 @@ function makeCamera(): Camera {
     video_count: 4,
     last_video: '2026-08-20T10:00:00Z',
     mqtt: null,
+    status: null,
+    latest_video: null,
   };
 }
 
@@ -57,9 +59,18 @@ describe('DashboardPage', () => {
       imports: [DashboardPage],
       providers: [
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => null } } } },
-        { provide: CameraService, useValue: { getCameras: () => of({ success: true, count: 1, data: [makeCamera()] }) } },
+        {
+          provide: CameraService,
+          useValue: { getCameras: () => of({ success: true, count: 1, data: [makeCamera()] }) },
+        },
         // Intencionalmente desordenado: el dashboard debe ordenar DESC.
-        { provide: VideoService, useValue: { getVideos: () => of({ success: true, count: 4, data: [D, B, A, C] }), setFavorite: setFavoriteSpy } },
+        {
+          provide: VideoService,
+          useValue: {
+            getVideos: () => of({ success: true, count: 4, data: [D, B, A, C] }),
+            setFavorite: setFavoriteSpy,
+          },
+        },
         { provide: StreamService, useValue: {} },
       ],
     }).compileComponents();

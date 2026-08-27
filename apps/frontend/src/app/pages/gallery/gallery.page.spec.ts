@@ -19,6 +19,8 @@ function makeCamera(): Camera {
     video_count: 2,
     last_video: '2026-08-20T10:00:00Z',
     mqtt: null,
+    status: null,
+    latest_video: null,
   };
 }
 
