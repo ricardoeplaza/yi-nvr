@@ -25,9 +25,9 @@ import { FormatDurationPipe } from '../format-duration.pipe';
       </div>
     </div>
   `,
-  styleUrl: './video-card.component.scss'
+  styleUrl: './video-card.scss'
 })
-export class VideoCardComponent {
+export class VideoCard {
   video = input.required<Video>();
   onDelete = input<() => void>();
 

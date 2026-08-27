@@ -18,7 +18,9 @@ function makeCamera(): Camera {
     has_videos: false,
     video_count: 0,
     last_video: null,
-    mqtt: null
+    mqtt: null,
+    status: null,
+    latest_video: null,
   };
 }
 
@@ -28,8 +30,8 @@ function makeStorageResponse() {
     data: {
       id: 'cam1',
       sd: { total_mb: 32768, free_mb: 16000, used_mb: 16768, free_pct: 49 },
-      dirs: ['2020Y01M01D01H', '2020Y01M02D03H', '2019Y12M31D23H']
-    }
+      dirs: ['2020Y01M01D01H', '2020Y01M02D03H', '2019Y12M31D23H'],
+    },
   };
 }
 
@@ -50,10 +52,10 @@ function makeFtpResponse() {
         FTP_HOST: '192.168.1.10',
         FTP_DIR: 'cam1',
         FTP_USERNAME: 'user',
-        FTP_PASSWORD: 'pass'
+        FTP_PASSWORD: 'pass',
       },
-      in_sync: ftpInSyncValue
-    }
+      in_sync: ftpInSyncValue,
+    },
   };
 }
 
@@ -72,17 +74,18 @@ describe('StoragePage', () => {
         deletedDirs.push(dir);
         return of({ success: true, deleted: dir });
       },
-      getDirFiles: (id: string, dir: string) => of({
-        success: true,
-        data: {
-          dir,
-          date: '2020-01-01',
-          files: [
-            { time: 'Time: 01:27', filename: '27M00S60.mp4', thumbfilename: '' },
-            { time: 'Time: 00:05', filename: '05M12S33.mp4', thumbfilename: '05M12S33.jpg' }
-          ]
-        }
-      }),
+      getDirFiles: (id: string, dir: string) =>
+        of({
+          success: true,
+          data: {
+            dir,
+            date: '2020-01-01',
+            files: [
+              { time: 'Time: 01:27', filename: '27M00S60.mp4', thumbfilename: '' },
+              { time: 'Time: 00:05', filename: '05M12S33.mp4', thumbfilename: '05M12S33.jpg' },
+            ],
+          },
+        }),
       deleteFile: (id: string, file: string) => {
         deletedFiles.push(file);
         return of({ success: true, deleted: file });
@@ -95,7 +98,7 @@ describe('StoragePage', () => {
       saveFtpConfig: (id: string, cfg: unknown) => {
         savedFtp.push(cfg);
         return of({ success: true, requires_reboot: true });
-      }
+      },
     };
   }
 
@@ -113,12 +116,15 @@ describe('StoragePage', () => {
       imports: [StoragePage],
       providers: [
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'cam1' } } } },
-        { provide: CameraService, useValue: {
-          getCameras: () => of({ success: true, count: 1, data: [makeCamera()] }),
-          rebootCamera: () => of({ success: true, rebooted: true })
-        } },
-        { provide: StorageService, useValue: storageServiceMock() }
-      ]
+        {
+          provide: CameraService,
+          useValue: {
+            getCameras: () => of({ success: true, count: 1, data: [makeCamera()] }),
+            rebootCamera: () => of({ success: true, rebooted: true }),
+          },
+        },
+        { provide: StorageService, useValue: storageServiceMock() },
+      ],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(StoragePage);
@@ -170,11 +176,17 @@ describe('StoragePage', () => {
     const fixture = await createPage();
     const component = fixture.componentInstance;
     storageError = {
-      error: { success: false, error: 'la cámara "cam1" es de ecosistema "generic": la gestión de SD requiere firmware yi-hack' }
+      error: {
+        success: false,
+        error:
+          'la cámara "cam1" es de ecosistema "generic": la gestión de SD requiere firmware yi-hack',
+      },
     };
     component.loadStorage();
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('la gestión de SD requiere firmware yi-hack');
+    expect(fixture.nativeElement.textContent).toContain(
+      'la gestión de SD requiere firmware yi-hack',
+    );
     fixture.destroy();
   });
 
@@ -186,7 +198,7 @@ describe('StoragePage', () => {
       FTP_HOST: '192.168.1.10',
       FTP_DIR: 'cam1',
       FTP_USERNAME: 'user',
-      FTP_PASSWORD: 'pass'
+      FTP_PASSWORD: 'pass',
     });
     expect(component.ftpInSync()).toBe(true);
     fixture.destroy();
@@ -221,7 +233,11 @@ describe('StoragePage', () => {
     component.ftpUpload.set(true);
     component.saveFtp();
     expect(savedFtp.length).toBe(1);
-    expect(savedFtp[0]).toEqual({ FTP_UPLOAD: 'yes', FTP_DIR_TREE: 'no', FTP_FILE_DELETE_AFTER_UPLOAD: 'no' });
+    expect(savedFtp[0]).toEqual({
+      FTP_UPLOAD: 'yes',
+      FTP_DIR_TREE: 'no',
+      FTP_FILE_DELETE_AFTER_UPLOAD: 'no',
+    });
     expect(savedFtp[0]).not.toHaveProperty('FTP_HOST');
     expect(savedFtp[0]).not.toHaveProperty('FTP_DIR');
     expect(savedFtp[0]).not.toHaveProperty('FTP_USERNAME');
@@ -257,7 +273,9 @@ describe('StoragePage', () => {
     const host = fixture.nativeElement;
     expect(host.querySelector('.ftp-form')).toBeNull();
     expect(host.querySelector('.ftp-warning')).toBeTruthy();
-    expect(host.textContent).toContain('Configuración incorrecta: el push FTP no está configurado contra el NVR');
+    expect(host.textContent).toContain(
+      'Configuración incorrecta: el push FTP no está configurado contra el NVR',
+    );
     fixture.destroy();
   });
 
@@ -297,7 +315,7 @@ describe('StoragePage', () => {
     fixture.detectChanges();
     const rows = fixture.nativeElement.querySelectorAll('.dir-row');
     expect(rows.length).toBe(2);
-    expect(component.dirs().map(d => d.name)).not.toContain('2020Y01M01D01H');
+    expect(component.dirs().map((d) => d.name)).not.toContain('2020Y01M01D01H');
     fixture.destroy();
   });
 
@@ -381,7 +399,11 @@ describe('StoragePage', () => {
     // El mock purga 1 de los 3 esperados (los 3 dirs del mock son de 2019/2020)
     component.purgeScope.set('day');
     component.onPurge();
-    expect(component.purgeOutcome()).toEqual({ expected: 3, purged: ['2020Y01M01D01H'], failed: 2 });
+    expect(component.purgeOutcome()).toEqual({
+      expected: 3,
+      purged: ['2020Y01M01D01H'],
+      failed: 2,
+    });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.purge-result.partial')).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('no pudieron borrarse');

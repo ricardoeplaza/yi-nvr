@@ -1,5 +1,6 @@
 export interface Video {
   id: number;
+  name: string | null;
   camera_name: string;
   timestamp: string;
   original_path: string;
@@ -7,6 +8,7 @@ export interface Video {
   preview_path: string;
   duration: number;
   file_size: number;
+  favorite: boolean;
   original_url: string;
   thumbnail_url: string;
   preview_url: string;

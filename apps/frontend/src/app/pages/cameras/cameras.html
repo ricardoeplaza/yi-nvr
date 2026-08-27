@@ -1,22 +1,32 @@
-<div class="cameras">
-  <header class="cameras-header">
-    <h1>Cámaras</h1>
+<div class="cameras-page">
+  <yi-app-header title="Cámaras">
     @if (cameras().length) {
       <p class="cameras-subtitle">
-        {{ cameras().length }} cámara{{ cameras().length !== 1 ? 's' : '' }} conectada{{ cameras().length !== 1 ? 's' : '' }}
+        {{ cameras().length }} cámara{{ cameras().length !== 1 ? 's' : '' }} conectada{{
+          cameras().length !== 1 ? 's' : ''
+        }}
       </p>
     }
-  </header>
+  </yi-app-header>
 
-  @if (loading()) {
-    <div class="loading">Cargando…</div>
-  } @else if (cameras().length) {
-    <div class="camera-grid">
-      @for (cam of cameras(); track cam.id) {
-        <yi-camera-card [camera]="cam" />
-      }
-    </div>
-  } @else {
-    <yi-empty-state icon="📷" title="Sin cámaras" subtitle="Configura cámaras en cameras.json" />
-  }
+  <main class="cameras">
+    @if (loading()) {
+      <div class="loading">Cargando…</div>
+    } @else if (cameras().length) {
+      <div class="camera-grid">
+        @for (cam of cameras(); track cam.id) {
+          <yi-camera-card
+            [camera]="cam"
+            [status]="cam.status"
+            [powerOn]="powerService.isOn(cam.id)"
+            [thumbnailUrl]="cam.latest_video?.thumbnail_url ?? null"
+            [lastEventAt]="lastClipAt(cam)"
+            (togglePower)="onTogglePower($event)"
+          />
+        }
+      </div>
+    } @else {
+      <yi-empty-state icon="📷" title="Sin cámaras" subtitle="Configura cámaras en cameras.json" />
+    }
+  </main>
 </div>

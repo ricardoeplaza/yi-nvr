@@ -32,12 +32,19 @@ export class Player implements OnDestroy {
   // Estado de favorito (solo reflejo visual): el padre indica si el clip ES
   // favorito y el botón se muestra marcado. Opcional (false por defecto).
   readonly isFavorite = input(false);
+  // When true, the video-wrap adopts the clip's intrinsic aspect ratio,
+  // defaulting to 16/9 until metadata loads (used by the gallery overlay only).
+  readonly adaptiveRatio = input(false);
 
   /* ---------- outputs ---------- */
   // Estado del stream en vivo (se conserva; lo consume camera-detail).
   readonly liveStatus = output<PlayerLiveStatus>();
   // Nuevo (aditivo): el padre decide qué hacer con el clip (p. ej. marcar favorito).
   readonly favorite = output<Video>();
+  // Clip siguiente (solo on-demand): se emite al padre cuando el clip llega al
+  // final Y el autoplay está activo. El padre decide qué clip reproducir a
+  // continuación (p. ej. el siguiente en el timeline).
+  readonly nextVideo = output<Video>();
 
   /* ---------- referencias de template ---------- */
   @ViewChild('videoEl') videoEl?: ElementRef<HTMLVideoElement>;
@@ -54,8 +61,15 @@ export class Player implements OnDestroy {
   // (el componente no se destruye entre videos).
   readonly muted = signal(true);
   readonly isFullscreen = signal(false);
+  // Aspect ratio del clip actual (adaptivo): '16 / 9' como fallback hasta que
+  // loadedmetadata aporte el ratio intrínseco.
+  readonly videoRatio = signal('16 / 9');
   // Ocultos por defecto: solo aparecen con interacción o en pausa/carga.
   readonly controlsVisible = signal(false);
+  // Autoplay del siguiente clip (on-demand): si está activo, al terminar un clip
+  // se emite nextVideo para que el padre seleccione el siguiente. Si está
+  // desactivado, NO se emite (el clip queda pausado al final).
+  readonly autoplay = signal(true);
   private seeking = false;
 
   /* ---------- estado live ---------- */
@@ -69,6 +83,7 @@ export class Player implements OnDestroy {
   private liveMseAbort: AbortController | null = null;
   private liveMse: MediaSource | null = null;
   private liveMseObjectUrl = '';
+  private lastOnDemandUrl: string | null = null;
   private hideTimer: number | null = null;
   private onFullscreenChange = () => this.isFullscreen.set(!!document.fullscreenElement);
 
@@ -83,7 +98,11 @@ export class Player implements OnDestroy {
       if (el) el.muted = true;
     });
 
-    // Al cambiar el video seleccionado: carga la fuente (si cambió) y reproduce.
+    // Al cambiar el video seleccionado: detiene el live (si había) y reproduce.
+    // La fuente la asigna la plantilla de forma declarativa ([attr.src]), así
+    // que este effect no depende de llegar primero a poner el src: solo
+    // reacciona al cambio (reset del tiempo, controles si queda pausado y
+    // play() como red de seguridad).
     // No se toca el estado de mute: arranca muted por defecto (onInit) y si el
     // usuario lo desilencia, el <video> conserva el estado para el siguiente
     // clip (el elemento no se destruye entre videos).
@@ -93,10 +112,17 @@ export class Player implements OnDestroy {
       this.resetLive();
       const el = this.videoEl?.nativeElement;
       if (!el) return;
-      if (el.currentSrc !== vid.original_url) {
+      // Red de seguridad para la transición live → on-demand: resetLive()
+      // limpia el atributo src que la plantilla acaba de asignar.
+      if (el.getAttribute('src') !== vid.original_url) {
         el.src = vid.original_url;
+      }
+      if (this.lastOnDemandUrl !== vid.original_url) {
+        this.lastOnDemandUrl = vid.original_url;
         this.currentTime.set(0);
         this.duration.set(0);
+        // Clip nuevo: el ratio vuelve al fallback hasta sus metadatos.
+        this.videoRatio.set('16 / 9');
       }
       this.paused.set(el.paused);
       // Al cargar: si el video queda pausado, se muestran los controles para
@@ -319,6 +345,13 @@ export class Player implements OnDestroy {
     this.favorite.emit(vid);
   }
 
+  // Alterna el autoplay del siguiente clip (on-demand). Activo → al terminar un
+  // clip se emite nextVideo; desactivado → no se emite (clip pausado al final).
+  toggleAutoplay() {
+    this.autoplay.set(!this.autoplay());
+    this.pokeControls();
+  }
+
   /* ---------- controles: captura (solo live) ---------- */
 
   // Captura 100% local: dibuja el frame actual en un <canvas>, toBlob() y
@@ -377,6 +410,16 @@ export class Player implements OnDestroy {
     this.clearHideTimer();
   }
 
+  // Fin natural del clip (on-demand): si el autoplay está activo se emite
+  // nextVideo para que el padre avance al clip siguiente. Si está desactivado,
+  // no se emite nada (el clip queda pausado al final).
+  onVideoEnded() {
+    if (!this.isOnDemandMode()) return;
+    if (!this.autoplay()) return;
+    const vid = this.video();
+    if (vid) this.nextVideo.emit(vid);
+  }
+
   onTimeUpdate() {
     if (this.seeking) return;
     const el = this.videoEl?.nativeElement;
@@ -385,7 +428,22 @@ export class Player implements OnDestroy {
 
   onLoadedMetadata() {
     const el = this.videoEl?.nativeElement;
-    if (el) this.duration.set(el.duration || 0);
+    if (!el) return;
+    this.duration.set(el.duration || 0);
+    if (
+      this.adaptiveRatio() &&
+      el.videoWidth > 0 &&
+      el.videoHeight > 0 &&
+      isFinite(el.videoWidth) &&
+      isFinite(el.videoHeight)
+    ) {
+      this.videoRatio.set(el.videoWidth + ' / ' + el.videoHeight);
+    }
+  }
+
+  // null → sin style inline → rige el aspect-ratio por defecto del CSS.
+  wrapAspectRatio(): string | null {
+    return this.adaptiveRatio() ? this.videoRatio() : null;
   }
 
   onWaiting() {

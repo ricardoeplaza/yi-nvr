@@ -1,0 +1,57 @@
+<article class="card" [class.is-selected]="isSelected()" [class.selecting]="selecting()" (mouseenter)="onEnter()" (mouseleave)="onLeave()">
+  <div class="thumb" tabindex="0" role="button" aria-label="Abrir clip" (click)="select.emit(video())" (keydown.enter)="select.emit(video())">
+    <div class="thumb-scene">
+      <img [src]="cardSrc()" alt="" loading="lazy" />
+    </div>
+    <div class="thumb-vignette"></div>
+    <span class="osd">{{ osdLabel() }}</span>
+    <div class="select-dot">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>
+    </div>
+    <button
+      class="fav-toggle"
+      [class.is-fav]="video().favorite"
+      [attr.aria-label]="video().favorite ? 'Quitar de favoritos' : 'Añadir a favoritos'"
+      (click)="$event.stopPropagation(); favorite.emit(video())"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8z"/></svg>
+    </button>
+    <div class="play-overlay">
+      <div class="play-btn" (click)="play.emit(video())">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+      </div>
+    </div>
+    <span class="camera-tag">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 7a2 2 0 012-2h4l1.5-1.8h1L14 5h4a2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2z"/></svg>
+      {{ video().camera_name }}
+    </span>
+    <span class="duration-badge">{{ video().duration | formatDuration }}</span>
+  </div>
+  <div class="card-meta">
+    <div class="card-title-row">
+      @if (renaming()) {
+        <input
+          class="card-title-input"
+          type="text"
+          [value]="renameValue()"
+          (input)="renameInput.emit($event)"
+          (keydown.enter)="renameCommit.emit(video())"
+          (keydown.escape)="renameCancel.emit()"
+          (blur)="renameCommit.emit(video())"
+          aria-label="Nuevo nombre"
+        />
+      } @else {
+        <span class="card-title" [class.is-empty]="!video().name">{{ video().name || 'Añadir nombre' }}</span>
+        <button class="icon-mini" (click)="renameStart.emit(video())" aria-label="Renombrar clip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+        </button>
+        <button class="icon-mini danger" (click)="remove.emit(video())" aria-label="Eliminar clip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+        </button>
+      }
+    </div>
+    @if (renaming() && renameError()) {
+      <p class="card-error">{{ renameError() }}</p>
+    }
+  </div>
+</article>

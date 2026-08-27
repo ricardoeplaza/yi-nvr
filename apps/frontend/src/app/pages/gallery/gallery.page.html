@@ -1,0 +1,169 @@
+<div class="gallery-page">
+  <yi-app-header title="Galería">
+    <div class="topbar-actions" appHeaderEnd>
+        <button class="text-btn" [class.is-active]="selecting()" (click)="toggleSelectMode()">{{ selecting() ? 'Cancelar' : 'Seleccionar' }}</button>
+        <button
+          class="icon-btn"
+          [class.active]="favoritesOnly()"
+          (click)="toggleFavoritesOnly()"
+          aria-label="Solo favoritos"
+          title="Solo favoritos"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8z"/></svg>
+        </button>
+        <button
+          class="icon-btn"
+          [class.active]="purgeOpen()"
+          (click)="openPurgeSheet()"
+          aria-label="Retención y borrado automático"
+          title="Retención y borrado automático"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+        </button>
+      </div>
+
+    <div class="searchbar">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input
+        type="search"
+        [value]="searchInput()"
+        (input)="onSearchInput($event)"
+        placeholder="Buscar por nombre o cámara…"
+        aria-label="Buscar"
+      />
+    </div>
+
+    <div class="chips-row" role="group" aria-label="Cámara">
+      <button class="chip" [class.is-selected]="cameraFilter() === ''" (click)="selectCamera('')">Todas</button>
+      @for (cam of cameras(); track cam.id) {
+        <button
+          class="chip"
+          [class.is-selected]="cameraFilter() === cam.ftp_dir"
+          [attr.data-ftp-dir]="cam.ftp_dir"
+          (click)="selectCamera(cam.ftp_dir)"
+        >{{ cam.name }}</button>
+      }
+    </div>
+
+    <div class="util-row">
+      <div class="date-popover">
+        <button class="util-btn" (click)="toggleDatePopover()" [attr.aria-expanded]="datePopoverOpen()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
+          {{ dateLabel() }}
+        </button>
+        @if (datePopoverOpen()) {
+          <div class="date-popover-panel">
+            <label class="date-field">
+              <span>Desde</span>
+              <input type="date" [value]="startDate()" (change)="onStartDateChange($event)" aria-label="Desde" />
+            </label>
+            <label class="date-field">
+              <span>Hasta</span>
+              <input type="date" [value]="endDate()" (change)="onEndDateChange($event)" aria-label="Hasta" />
+            </label>
+            <div class="date-popover-actions">
+              <button type="button" class="ghost-btn" (click)="clearDateRange()">Limpiar</button>
+              <button type="button" class="apply-btn" (click)="closeDatePopover()">Aplicar</button>
+            </div>
+          </div>
+        }
+      </div>
+      <div class="util-spacer"></div>
+      <span class="result-count">{{ videos().length }} clips</span>
+    </div>
+  </yi-app-header>
+
+  <main class="gallery">
+    @if (loading()) {
+      <div class="loading">Cargando…</div>
+    } @else if (dayGroups().length) {
+      @for (group of dayGroups(); track group.key) {
+        <section class="day-group">
+          <h2 class="day-header">
+            {{ group.label }}
+            @if (group.dateLabel) {
+              <span>· {{ group.dateLabel }}</span>
+            }
+          </h2>
+          <div class="grid">
+            @for (vid of group.videos; track vid.id) {
+              <yi-gallery-card
+                [video]="vid"
+                [isSelected]="isSelected(vid)"
+                [selecting]="selecting()"
+                [renaming]="renamingId() === vid.id"
+                [renameValue]="renameValue()"
+                [renameError]="renameError()"
+                (select)="onCardClick(vid)"
+                (play)="onPlay(vid)"
+                (favorite)="toggleFavorite(vid)"
+                (renameStart)="startRename(vid)"
+                (renameInput)="onRenameInput($event)"
+                (renameCommit)="commitRename(vid)"
+                (renameCancel)="cancelRename()"
+                (remove)="deleteVideo(vid)"
+              />
+            }
+          </div>
+        </section>
+      }
+      @if (loadingMore()) {
+        <div class="loading">Cargando más…</div>
+      } @else if (hasMore()) {
+        <div class="load-more-row">
+          <button class="load-btn" (click)="loadMore()">Cargar más</button>
+        </div>
+      }
+    } @else {
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        @if (hasFilters()) {
+          <h3>Sin resultados</h3>
+          <p>Ninguna grabación coincide con los filtros.</p>
+        } @else {
+          <h3>Sin grabaciones</h3>
+          <p>Esperando nuevas grabaciones…</p>
+        }
+      </div>
+    }
+  </main>
+
+  <yi-selection-bar
+    [show]="selecting()"
+    [count]="selectedCount()"
+    (favorite)="bulkFavorite()"
+    (remove)="bulkDelete()"
+  />
+
+  <yi-purge-sheet
+    [open]="purgeOpen()"
+    [scope]="purgeScope()"
+    [expected]="purgeExpected()"
+    [purging]="purging()"
+    [usedLabel]="storageUsedLabel()"
+    [storageCount]="storageCount()"
+    (scopeChange)="selectPurgeScope($event)"
+    (purge)="onPurge()"
+    (close)="closePurgeSheet()"
+  />
+
+  @if (playingVideo()) {
+    <div class="player-overlay" (click)="closePlayer()">
+      <button class="player-close" type="button" aria-label="Cerrar reproductor" (click)="closePlayer()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="player-host" (click)="$event.stopPropagation()">
+        <yi-player
+          [video]="playingVideo()"
+          [title]="playingVideo()?.camera_name ?? ''"
+          [isFavorite]="playingVideo()?.favorite ?? false"
+          [adaptiveRatio]="true"
+          (favorite)="toggleFavorite($event)"
+        ></yi-player>
+      </div>
+    </div>
+  }
+
+  <yi-confirm-dialog />
+  <yi-toast />
+</div>

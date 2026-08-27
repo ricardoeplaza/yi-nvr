@@ -1,16 +1,18 @@
 <div class="player" #playerEl (pointermove)="pokeControls()" (pointerdown)="pokeControls()">
-  <div class="video-wrap" (click)="togglePlay()">
+  <div class="video-wrap" [class.adaptive]="adaptiveRatio()" [style.aspect-ratio]="wrapAspectRatio()" (click)="togglePlay()">
     <video
       #videoEl
       playsinline
       muted
       autoplay
+      [attr.src]="video()?.original_url"
       (play)="onVideoPlay()"
       (pause)="onVideoPause()"
       (timeupdate)="onTimeUpdate()"
       (loadedmetadata)="onLoadedMetadata()"
       (waiting)="onWaiting()"
       (canplay)="onCanPlay()"
+      (ended)="onVideoEnded()"
       (volumechange)="onVolumeChange()"
       (playing)="onLivePlaying()"
       (error)="onLiveError()"
@@ -124,6 +126,16 @@
               } @else {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.6l5.8-.8Z" /></svg>
               }
+            </button>
+            <button
+              class="icon-btn"
+              type="button"
+              (click)="toggleAutoplay()"
+              [class.autoplay-active]="autoplay()"
+              [attr.aria-label]="autoplay() ? 'Desactivar reproducción automática' : 'Activar reproducción automática'"
+              [title]="autoplay() ? 'Reproducción automática (activa)' : 'Reproducción automática'"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5v14l9-7z" /><path d="M17 5h2v14h-2z" /></svg>
             </button>
           } @else if (liveUrl()) {
             <button class="icon-btn" type="button" (click)="takeSnapshot()" aria-label="Hacer captura" title="Captura">

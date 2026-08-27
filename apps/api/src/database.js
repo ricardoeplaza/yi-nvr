@@ -10,12 +10,14 @@
  * Tabla principal: videos
  *  - id: Identificador único auto-incremental
  *  - camera_name: Nombre de la cámara (extraído del path o proporcionado)
+ *  - name: Nombre personalizado asignado por el usuario (NULL si no se ha puesto)
  *  - timestamp: Fecha y hora del evento (ISO 8601)
  *  - original_path: Ruta absoluta del archivo .mp4 original
  *  - thumbnail_path: Ruta del thumbnail JPG generado
  *  - preview_path: Ruta del preview WebP animado
  *  - duration: Duración del video en segundos
  *  - file_size: Tamaño del archivo en bytes
+ *  - favorite: Si el clip está marcado como favorito (0/1)
  */
 
 const Database = require('better-sqlite3');
@@ -48,16 +50,28 @@ function initSchema() {
         CREATE TABLE IF NOT EXISTS videos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             camera_name TEXT NOT NULL,
+            name TEXT,
             timestamp TEXT NOT NULL,
             original_path TEXT NOT NULL UNIQUE,
             thumbnail_path TEXT,
             preview_path TEXT,
             duration REAL,
             file_size INTEGER,
+            favorite INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `;
     db.exec(createTable);
+
+    // Migración defensiva: añade la columna favorite a BDs creadas antes de
+    // que existiera (CREATE TABLE IF NOT EXISTS no altera tablas existentes).
+    const videoCols = db.prepare('PRAGMA table_info(videos)').all().map(c => c.name);
+    if (!videoCols.includes('favorite')) {
+        db.exec('ALTER TABLE videos ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!videoCols.includes('name')) {
+        db.exec('ALTER TABLE videos ADD COLUMN name TEXT');
+    }
 
     // Índices para búsquedas rápidas por cámara y fecha
     db.exec(`CREATE INDEX IF NOT EXISTS idx_videos_camera ON videos(camera_name)`);
@@ -123,28 +137,54 @@ function insertVideo(videoData) {
 }
 
 /**
- * Obtiene videos filtrados por rango de fechas y/o cámara.
- * @param {Object} filters - Filtros opcionales: camera, startDate, endDate
- * @returns {Array} - Lista de videos ordenados por timestamp descendente
+ * Construye la cláusula WHERE y sus parámetros a partir de los filtros de
+ * video compartidos por getVideos y countVideos.
+ * @param {Object} filters - Filtros opcionales:
+ *   camera (string), startDate/endDate (ISO 8601), q (texto libre, busca en
+ *   name y camera_name), favorite (0 | 1, exacto)
+ * @returns {{clause: string, params: Object}}
  */
-function getVideos(filters = {}) {
-    let query = 'SELECT * FROM videos WHERE 1=1';
+function buildVideoFilterClause(filters = {}) {
+    const conditions = ['1=1'];
     const params = {};
 
     if (filters.camera) {
-        query += ' AND camera_name = @camera';
+        conditions.push('camera_name = @camera');
         params.camera = filters.camera;
     }
 
     if (filters.startDate) {
-        query += ' AND timestamp >= @startDate';
+        conditions.push('timestamp >= @startDate');
         params.startDate = filters.startDate;
     }
 
     if (filters.endDate) {
-        query += ' AND timestamp <= @endDate';
+        conditions.push('timestamp <= @endDate');
         params.endDate = filters.endDate;
     }
+
+    if (filters.q) {
+        conditions.push('(name LIKE @q OR camera_name LIKE @q)');
+        params.q = `%${filters.q}%`;
+    }
+
+    if (filters.favorite !== undefined && filters.favorite !== null) {
+        conditions.push('favorite = @favorite');
+        params.favorite = Number(filters.favorite);
+    }
+
+    return { clause: conditions.join(' AND '), params };
+}
+
+/**
+ * Obtiene videos filtrados por rango de fechas, cámara, texto y/o favorito.
+ * @param {Object} filters - Filtros opcionales: camera, startDate, endDate,
+ *   q (búsqueda en name/camera_name), favorite (0|1), limit, offset
+ * @returns {Array} - Lista de videos ordenados por timestamp descendente
+ */
+function getVideos(filters = {}) {
+    const { clause, params } = buildVideoFilterClause(filters);
+    let query = `SELECT * FROM videos WHERE ${clause}`;
 
     query += ' ORDER BY timestamp DESC';
 
@@ -153,8 +193,70 @@ function getVideos(filters = {}) {
         params.limit = filters.limit;
     }
 
+    if (filters.offset) {
+        query += ' OFFSET @offset';
+        params.offset = filters.offset;
+    }
+
     const stmt = db.prepare(query);
     return stmt.all(params);
+}
+
+/**
+ * Cuenta los videos que cumplen los filtros (mismos que getVideos, sin
+ * limit/offset).
+ * @param {Object} filters - Filtros opcionales: camera, startDate, endDate,
+ *   q, favorite
+ * @returns {number} - Número de videos que cumplen los filtros
+ */
+function countVideos(filters = {}) {
+    const { clause, params } = buildVideoFilterClause(filters);
+    const stmt = db.prepare(`SELECT COUNT(*) as count FROM videos WHERE ${clause}`);
+    return stmt.get(params).count;
+}
+
+/**
+ * Borra de la BD los videos NO favoritos dentro del rango [from, to]
+ * (inclusivo) y devuelve las filas borradas (con sus paths) para que el
+ * llamador elimine los archivos físicos.
+ *
+ * from/to: strings ISO 8601 UTC (p. ej. '2026-08-01T00:00:00.000Z'), el
+ * mismo formato en el que se guarda la columna timestamp; la comparación
+ * lexicográfica coincide con el orden cronológico. Ambos son OPCIONALES
+ * (se requiere al menos uno):
+ *  - from ausente → sin límite inferior
+ *  - to ausente → sin límite superior
+ *
+ * SIEMPRE excluye los favoritos (favorite = 0).
+ * @param {{from?: string, to?: string}} range - Rango de timestamps (inclusive)
+ * @returns {Array} - Filas de videos borradas de la BD
+ */
+function purgeVideos({ from, to } = {}) {
+    const conditions = ['favorite = 0'];
+    const params = {};
+    if (from !== undefined && from !== null) {
+        conditions.push('timestamp >= @from');
+        params.from = from;
+    }
+    if (to !== undefined && to !== null) {
+        conditions.push('timestamp <= @to');
+        params.to = to;
+    }
+    const select = db.prepare(`
+        SELECT * FROM videos
+        WHERE ${conditions.join(' AND ')}
+    `);
+    const videos = select.all(params);
+
+    if (videos.length) {
+        const removeMany = db.transaction(rows => {
+            const del = db.prepare('DELETE FROM videos WHERE id = @id');
+            rows.forEach(row => del.run({ id: row.id }));
+        });
+        removeMany(videos);
+    }
+
+    return videos;
 }
 
 /**
@@ -194,20 +296,33 @@ function getCameraStats() {
 }
 
 /**
- * Obtiene datos agregados para el timeline (videos agrupados por día).
- * @returns {Array} - Datos agrupados por fecha
+ * Último video de cada cámara en UN SOLO query (para el listado de
+ * cámaras: N cámaras → 1 query, no N). ROW_NUMBER por camera_name
+ * ordenado por timestamp DESC (id DESC como desempate) y se queda con
+ * rn = 1 de cada cámara.
+ * @param {string[]} cameraNames - ftp_dirs a consultar (camera_name en la BD)
+ * @returns {Array} - Máximo una fila por cámara (sin la columna auxiliar rn)
  */
-function getTimelineData() {
+function getLatestVideosByCamera(cameraNames) {
+    if (!Array.isArray(cameraNames) || cameraNames.length === 0) {
+        return [];
+    }
+    const placeholders = cameraNames.map(() => '?').join(', ');
     const stmt = db.prepare(`
-        SELECT 
-            date(timestamp) as date,
-            camera_name,
-            COUNT(*) as count
-        FROM videos
-        GROUP BY date(timestamp), camera_name
-        ORDER BY date(timestamp) DESC
+        SELECT id, camera_name, name, timestamp, original_path, thumbnail_path,
+               preview_path, duration, file_size, favorite, created_at
+        FROM (
+            SELECT v.*,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY v.camera_name
+                       ORDER BY v.timestamp DESC, v.id DESC
+                   ) AS rn
+            FROM videos v
+            WHERE v.camera_name IN (${placeholders})
+        )
+        WHERE rn = 1
     `);
-    return stmt.all();
+    return stmt.all(...cameraNames);
 }
 
 /**
@@ -223,6 +338,18 @@ function updateVideo(id, updates) {
 }
 
 /**
+ * Marca o desmarca un video como favorito.
+ * @param {number} id - ID del video
+ * @param {boolean} favorite - true para marcar, false para desmarcar
+ * @returns {boolean} - True si se actualizó, false si no existía
+ */
+function setVideoFavorite(id, favorite) {
+    const stmt = db.prepare('UPDATE videos SET favorite = ? WHERE id = ?');
+    const result = stmt.run(favorite ? 1 : 0, id);
+    return result.changes > 0;
+}
+
+/**
  * Elimina un video de la base de datos por su ID.
  * @param {number} id - ID del video a eliminar
  * @returns {boolean} - True si se eliminó, false si no existía
@@ -231,6 +358,60 @@ function deleteVideo(id) {
     const stmt = db.prepare('DELETE FROM videos WHERE id = ?');
     const result = stmt.run(id);
     return result.changes > 0;
+}
+
+/**
+ * Gets the video rows for the given ids (IN clause). Ids that do not exist
+ * are simply not returned.
+ * @param {number[]} ids - Video ids to look up
+ * @returns {Array} - Matching video rows (with paths), at most one per id
+ */
+function bulkGetVideos(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return [];
+    }
+    const placeholders = ids.map(() => '?').join(', ');
+    const stmt = db.prepare(`SELECT * FROM videos WHERE id IN (${placeholders})`);
+    return stmt.all(...ids);
+}
+
+/**
+ * Deletes the given video ids from the DB in a single transaction and
+ * returns the deleted rows (with paths) so the caller can remove the
+ * physical files. Ids that do not exist are ignored.
+ * @param {number[]} ids - Video ids to delete
+ * @returns {Array} - Deleted video rows (with paths), at most one per id
+ */
+function bulkDeleteVideos(ids) {
+    const rows = bulkGetVideos(ids);
+    if (rows.length === 0) {
+        return [];
+    }
+    const removeMany = db.transaction(list => {
+        const del = db.prepare('DELETE FROM videos WHERE id = ?');
+        list.forEach(row => del.run(row.id));
+    });
+    removeMany(rows);
+    return rows;
+}
+
+/**
+ * Sets the favorite flag on multiple videos in a single transaction.
+ * Ids that do not exist are ignored.
+ * @param {number[]} ids - Video ids to update
+ * @param {boolean} favorite - true to mark as favorite, false to unmark
+ * @returns {number} - Number of rows actually updated (changes)
+ */
+function bulkSetFavorite(ids, favorite) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return 0;
+    }
+    const placeholders = ids.map(() => '?').join(', ');
+    const run = db.transaction(() => {
+        const stmt = db.prepare(`UPDATE videos SET favorite = ? WHERE id IN (${placeholders})`);
+        return stmt.run(favorite ? 1 : 0, ...ids).changes;
+    });
+    return run();
 }
 
 // ============================================
@@ -390,12 +571,18 @@ initSchema();
 module.exports = {
     insertVideo,
     getVideos,
+    countVideos,
+    purgeVideos,
     getVideoById,
     getAllCameras,
     getCameraStats,
-    getTimelineData,
+    getLatestVideosByCamera,
     updateVideo,
+    setVideoFavorite,
     deleteVideo,
+    bulkGetVideos,
+    bulkDeleteVideos,
+    bulkSetFavorite,
     upsertPushSubscription,
     getPushSubscription,
     getAllPushSubscriptions,

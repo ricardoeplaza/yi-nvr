@@ -1,8 +1,5 @@
-.app-main {
-  max-width: 480px;
-  margin: 0 auto;
-  min-height: calc(100vh - var(--tab-bar-h) - env(safe-area-inset-bottom, 0px));
-  padding-bottom: calc(var(--tab-bar-h) + env(safe-area-inset-bottom, 0px));
+:host {
+  display: contents;
 }
 
 .tab-bar {
@@ -26,7 +23,10 @@
     align-items: center;
     gap: 3px;
     color: var(--text-faint);
-    text-decoration: none;
+    background: none;
+    border: none;
+    font-family: inherit;
+    cursor: pointer;
     transition: color 0.15s ease;
 
     svg {

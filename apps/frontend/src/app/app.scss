@@ -1,0 +1,6 @@
+.app-main {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: calc(100vh - var(--tab-bar-h) - env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--tab-bar-h) + env(safe-area-inset-bottom, 0px));
+}

@@ -37,6 +37,12 @@
     display: block;
     background: #000;
   }
+
+  // Modo adaptivo: letterbox en vez de recorte (mientras el ratio es el
+  // fallback 16/9 y el clip no lo es; cuando coincide, contain == cover).
+  &.adaptive video {
+    object-fit: contain;
+  }
 }
 
 /* ---------- SCRIM SUPERIOR ---------- */
@@ -304,6 +310,15 @@
   // Favorito activo: icono relleno con el color de acento (estado lo da el
   // input isFavorite del padre; aquí solo se refleja).
   &.fav-active {
+    color: var(--accent-blue);
+
+    svg {
+      opacity: 1;
+    }
+  }
+
+  // Autoplay del siguiente clip activo: marcado con el color de acento.
+  &.autoplay-active {
     color: var(--accent-blue);
 
     svg {

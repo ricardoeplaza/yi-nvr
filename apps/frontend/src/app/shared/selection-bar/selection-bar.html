@@ -1,0 +1,12 @@
+<div class="selection-bar" [class.show]="show()">
+  <span class="sel-count">{{ count() }} {{ count() === 1 ? 'seleccionado' : 'seleccionados' }}</span>
+  <div class="sel-spacer"></div>
+  <button class="sel-btn" [disabled]="count() === 0" (click)="favorite.emit()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8z"/></svg>
+    Favorito
+  </button>
+  <button class="sel-btn danger" [disabled]="count() === 0" (click)="remove.emit()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+    Eliminar
+  </button>
+</div>

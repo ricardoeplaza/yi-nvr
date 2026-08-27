@@ -768,6 +768,64 @@ disjuntos.
 - **Status**: `[INTEG]` — verificado nativamente (200, contenido correcto).
   Registro + push real pendiente en integración.
 
+### D28 (yi-api) — Timestamp de grabación real (`creation_time`), renombrado a `<ISO-timestamp>_<cámara>.mp4`, y eliminación opcional de la pista low-res
+
+Corrección sobre el bug del timestamp en `handleNewVideo` de `ftp.js`: antes usaba
+`new Date().toISOString()` (hora de subida por FTP) como `timestamp`. Con
+`FTP_DIR_TREE=no` todos los clips de todas las horas comparten un directorio, y
+el nombre base-8 (`MM M SS S XX`, dígitos en base-8) solo codifica
+minuto:segundo:cuadro (sin hora ni fecha). Así, clips de horas distintas colisionan
+(p. ej. 13:05:19 y 14:05:19 ambos `"05M19S41.mp4"`), y renombrar con la hora de
+subida colisionaba → dos clips distintos terminaban en el mismo nombre.
+
+- **Fuente del timestamp**: `creation_time` del MP4 (ISO 8601 completo:
+  `YYYY-MM-DDTHH:MM:SS.000000Z`), extraído con `getCreationTime()` en
+  `ftp.js`. Se usa `ffprobe` (no `-show_entries` en ffmpeg 9.0) y
+  `execFileSync` para una captura sincrónica fiable en Windows. El formato
+  `TAG:creation_time=(\S+)` es inequívoco incluso con el banner de versión
+  mezclado (solo la línea de formato usa `TAG:` sin espacios).
+  - **Fallback**: si `ffprobe` falla (clip en progreso, `"moov atom not found"`,
+    binario inexistente), `getCreationTime` devuelve `null` y el timestamp cae a
+    la hora de subida (`new Date().toISOString()`). El fallo NO bloquea el
+    pipeline (cae a la hora de subida).
+- **Timestamp en la BD + zona horaria**: `getCreationTime` devuelve ISO 8601
+  **UTC** con `'Z'` (p. ej. `2026-08-19T14:05:19.000Z`), que es lo que se guarda
+  en `videos.timestamp`. El frontend Angular hace `new Date(v.timestamp)` y
+  `getHours()`/`toLocaleDateString()`, que el navegador convierte a la hora
+  **LOCAL** del dispositivo (14:05 UTC → 16:05 en UTC+2). NO se convierte a
+  local en el backend (doble conversión); se guarda siempre full-date-full-time
+  con `'Z'` porque `new Date()` solo parsea ese formato con zona/offset.
+- **Renombrado**: el timestamp ISO lleva `':'` y `'.'` (inválidos en nombres de
+  archivo de Windows), así que se deriva un nombre seguro `YYYY-MM-DDTHH-MM-SS`
+  en hora **LOCAL** (coincide con el dashboard): p. ej.
+  `2026-08-19T16-05-19_oficina.mp4`. Colisiones `_2`/`_3` con
+  `while (fs.existsSync(finalPath))`.
+- **Dedup / re-trigger de chokidar**: el rename final ocurre DENTRO de
+  `RECORDINGS_DIR` (lo que vigila chokidar), así que chokidar dispara un `add`
+  sobre el nombre ya renombrado y `handleNewVideo` se ejecutaría una 2ª vez
+  (thumbnail/preview duplicados + violación `UNIQUE videos.original_path` al
+  reinsertar). Dos capas:
+  - `isOwnGeneratedFile()` / `OWN_FILENAME_PATTERN`: ignora cualquier basename
+    con nuestro formato generado (`YYYY-MM-DDTHH-MM-SS_cam[_N].mp4`); los crudos
+    de la cámara usan base-8 y nunca lo tienen. Cubre el `add` del rename final.
+  - Set `processingFiles` (marcado al entrar en `handleNewVideo`, liberado a
+    los 5 s): cubre los `change` intermedios durante remux/estabilidad.
+  - **TODO (futuro corto)**: desdoblar `RECORDINGS_DIR` en `incoming` (subida
+    FTP, lo único que vigila chokidar) + `recording` (procesados, listos para
+    archivar). El rename movería el clip fuera de la carpeta vigilada y el
+    filtro de nombre dejaría de ser necesario. Extra: `incoming` podría
+    mapearse a un ramdisk (tmpfs) para evitar la escritura temporal en disco.
+- **Eliminación opcional de la pista low-res**: `removeLowResTrack()` elimina la
+  pista de vídeo de baja resolución (640x360, stream 1) por stream copy
+  (ffmpeg NO transcodifica). El clip tiene 3 streams: 0 = vídeo 1920x1080 H.264,
+  1 = vídeo 640x360 H.264 (preview, ~26% del tamaño, INÚTIL para nosotros:
+  generamos nuestras propias miniaturas/previews), 2 = audio AAC. Al mapear solo
+  0 y 2, se elimina ~26% de almacenamiento. Toggle `REMOVE_LOWRES_TRACK`
+  (`true`/`false` en `.env.example`, default `true`). El temp se escribe con
+  extensión `.mp4` (ffmpeg infiere el formato del sufijo) y queda oculto
+  (dotfile); chokidar lo ignora (`ignored: /(^|[\/\\])\../`). Si falla, no
+   bloquea (el archivo original queda intacto).
+
 ## Notas durante el desarrollo (live view)
 
 Historial de la depuración del stream en vivo, para que no caiga en el

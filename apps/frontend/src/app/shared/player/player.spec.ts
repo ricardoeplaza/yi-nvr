@@ -5,6 +5,7 @@ import type { Video } from '../../models/video.model';
 function makeVideo(): Video {
   return {
     id: 1,
+    name: null,
     camera_name: 'cam1',
     timestamp: new Date(2026, 7, 20, 10, 30).toISOString(),
     original_path: '',
@@ -12,6 +13,7 @@ function makeVideo(): Video {
     preview_path: '',
     duration: 60,
     file_size: 1024,
+    favorite: false,
     original_url: 'https://example.com/clips/clip1.mp4',
     thumbnail_url: '',
     preview_url: '',
@@ -252,6 +254,113 @@ describe('Player', () => {
         // Componente 100% controlado: sin isFavorite=true del padre, sin marcado.
         expect(host.querySelector('button.fav-active')).toBeNull();
       });
+    });
+
+    describe('autoplay del siguiente clip', () => {
+      function autoButton(): HTMLElement {
+        return host.querySelector('button[aria-label="Desactivar reproducción automática"], button[aria-label="Activar reproducción automática"]') as HTMLElement;
+      }
+
+      it('muestra el botón de autoplay en modo on-demand, activo por defecto', () => {
+        fixture.componentRef.setInput('video', makeVideo());
+        fixture.detectChanges();
+        const btn = autoButton();
+        expect(btn).toBeTruthy();
+        expect(component.autoplay()).toBe(true);
+        expect(btn.classList.contains('autoplay-active')).toBe(true);
+      });
+
+      it('al terminar un clip con autoplay activo emite nextVideo con el Video', () => {
+        const vid = makeVideo();
+        fixture.componentRef.setInput('video', vid);
+        fixture.detectChanges();
+        let next: Video | null = null;
+        component.nextVideo.subscribe((v) => (next = v));
+        component.onVideoEnded();
+        expect(next).toBe(vid);
+      });
+
+      it('toggleAutoplay desactiva el autoplay y el botón pierde el marcado', () => {
+        fixture.componentRef.setInput('video', makeVideo());
+        fixture.detectChanges();
+        component.toggleAutoplay();
+        fixture.detectChanges();
+        expect(component.autoplay()).toBe(false);
+        expect(host.querySelector('button.autoplay-active')).toBeNull();
+      });
+
+      it('con autoplay desactivado NO emite nextVideo al terminar el clip', () => {
+        fixture.componentRef.setInput('video', makeVideo());
+        fixture.detectChanges();
+        component.toggleAutoplay();
+        let next: Video | null = null;
+        component.nextVideo.subscribe((v) => (next = v));
+        component.onVideoEnded();
+        expect(next).toBeNull();
+      });
+    });
+  });
+
+  describe('creación condicional (regresión)', () => {
+    it('asigna el src aunque el video se pase al crear el componente', () => {
+      // Simula la galería: <yi-player> creado dentro de @if, ya con el video
+      // seleccionado (el input se fija ANTES de la primera detección de cambios).
+      // El src se asigna de forma declarativa en la plantilla; la reproducción
+      // la arranca el atributo autoplay (el effect se ejecuta antes de que se
+      // resuelva @ViewChild, así que no puede depender de él para el src).
+      fixture.destroy();
+      fixture = TestBed.createComponent(Player);
+      component = fixture.componentInstance;
+      const v = fixture.nativeElement.querySelector('video') as HTMLVideoElement;
+      v.play = vi.fn(() => Promise.resolve());
+      v.pause = vi.fn();
+      v.load = vi.fn();
+      fixture.componentRef.setInput('video', makeVideo());
+      fixture.detectChanges();
+      expect(v.getAttribute('src')).toContain('clip1.mp4');
+    });
+  });
+
+  describe('aspect ratio adaptativo', () => {
+    function videoWrap(): HTMLElement {
+      return host.querySelector('.video-wrap') as HTMLElement;
+    }
+
+    function setIntrinsicSize(w: number, h: number) {
+      Object.defineProperty(videoEl, 'videoWidth', { configurable: true, value: w });
+      Object.defineProperty(videoEl, 'videoHeight', { configurable: true, value: h });
+      videoEl.dispatchEvent(new Event('loadedmetadata'));
+    }
+
+    it('modo por defecto: sin aspect-ratio inline (rige el CSS 4/3.15)', () => {
+      fixture.componentRef.setInput('video', makeVideo());
+      fixture.detectChanges();
+      expect(videoWrap().style.aspectRatio).toBe('');
+      expect(videoWrap().classList.contains('adaptive')).toBe(false);
+    });
+
+    it('adaptiveRatio=true: arranca en 16/9 y adopta el ratio real en loadedmetadata', () => {
+      fixture.componentRef.setInput('adaptiveRatio', true);
+      fixture.componentRef.setInput('video', makeVideo());
+      fixture.detectChanges();
+      expect(videoWrap().style.aspectRatio).toBe('16 / 9');
+      expect(videoWrap().classList.contains('adaptive')).toBe(true);
+      setIntrinsicSize(1280, 720);
+      fixture.detectChanges();
+      expect(videoWrap().style.aspectRatio).toBe('1280 / 720');
+    });
+
+    it('al cambiar de clip el ratio vuelve a 16/9 hasta los nuevos metadatos', () => {
+      fixture.componentRef.setInput('adaptiveRatio', true);
+      fixture.componentRef.setInput('video', makeVideo());
+      fixture.detectChanges();
+      setIntrinsicSize(1280, 720);
+      fixture.detectChanges();
+      expect(videoWrap().style.aspectRatio).toBe('1280 / 720');
+      const other = { ...makeVideo(), id: 2, original_url: 'https://example.com/clips/clip2.mp4' };
+      fixture.componentRef.setInput('video', other);
+      fixture.detectChanges();
+      expect(videoWrap().style.aspectRatio).toBe('16 / 9');
     });
   });
 
