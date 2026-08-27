@@ -1,17 +1,17 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { PushService } from '../../services/push.service';
+import { AppHeader } from '../../shared/app-header/app-header';
 
 type PushStatus = 'inactive' | 'active' | 'error' | 'loading';
 
 @Component({
   selector: 'yi-settings-page',
   standalone: true,
+  imports: [AppHeader],
   template: `
     <div class="settings">
-      <header class="settings-header">
-        <h1>Ajustes</h1>
-      </header>
+      <yi-app-header title="Ajustes" />
 
       <section class="settings-section">
         <h2>Notificaciones</h2>

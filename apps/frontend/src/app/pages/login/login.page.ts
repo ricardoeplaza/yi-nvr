@@ -21,6 +21,7 @@ export class LoginPage {
 
   login() {
     localStorage.setItem('yi-nvr-auth', 'true');
-    this.router.navigate(['/']);
+    // replace: /login no queda en el historial (back desde / sale de la app).
+    this.router.navigate(['/'], { replaceUrl: true });
   }
 }

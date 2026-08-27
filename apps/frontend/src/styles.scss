@@ -18,6 +18,8 @@
   --radius-md: 14px;
   --radius-sm: 10px;
   --tab-bar-h: 64px;
+  --ease-spring: cubic-bezier(.36,1.6,.4,1);
+  --shadow-card: 0 1px 2px rgba(18,22,28,.04), 0 10px 24px -8px rgba(18,22,28,.10);
 }
 
 * {
@@ -36,4 +38,10 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+// Mientras el footer rebobina el historial al cambiar de tab, el contenido
+// intermedio no debe ser visible (el footer sí).
+body.app-nav-unwind .app-main {
+  visibility: hidden;
 }

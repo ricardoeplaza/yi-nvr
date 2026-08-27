@@ -5,15 +5,18 @@ import { StreamService } from '../../services/stream.service';
 import { Camera, CameraStatus } from '../../models/camera.model';
 import { Player, PlayerLiveStatus } from '../../shared/player/player';
 import { FormatDatePipe } from '../../shared/format-date.pipe';
+import { AppBack } from '../../shared/app-back/app-back';
 
 const STATUS_POLL_MS = 30000;
 
 @Component({
   selector: 'yi-camera-detail-page',
   standalone: true,
-  imports: [Player, FormatDatePipe, RouterLink],
+  imports: [Player, FormatDatePipe, RouterLink, AppBack],
   template: `
     <div class="cam-detail">
+      <yi-app-back [to]="['/cameras']" />
+
       <yi-player
         [title]="camera()?.name || ''"
         [liveUrl]="liveUrl()"

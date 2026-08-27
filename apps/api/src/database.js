@@ -283,23 +283,6 @@ function getCameraStats() {
 }
 
 /**
- * Obtiene datos agregados para el timeline (videos agrupados por día).
- * @returns {Array} - Datos agrupados por fecha
- */
-function getTimelineData() {
-    const stmt = db.prepare(`
-        SELECT 
-            date(timestamp) as date,
-            camera_name,
-            COUNT(*) as count
-        FROM videos
-        GROUP BY date(timestamp), camera_name
-        ORDER BY date(timestamp) DESC
-    `);
-    return stmt.all();
-}
-
-/**
  * Actualiza un video existente (útil para añadir paths de thumbnail/preview después del procesamiento).
  * @param {number} id - ID del video
  * @param {Object} updates - Campos a actualizar
@@ -496,7 +479,6 @@ module.exports = {
     getVideoById,
     getAllCameras,
     getCameraStats,
-    getTimelineData,
     updateVideo,
     setVideoFavorite,
     deleteVideo,

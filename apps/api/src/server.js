@@ -23,9 +23,8 @@
  *  - GET /api/cameras/:id/status - Estado real (proxy HTTP a los CGI yi-hack)
  *  - POST /api/cameras/:id/reboot - Reinicia la cámara (CGI reboot.sh)
  *  - POST /api/cameras/:id/httpd  - HTTPD yes/no (aplicado en el siguiente boot)
- *  - POST /api/cameras/:id/push   - Push de movimiento de la cámara (NVR)
- *  - GET /api/timeline        - Datos agregados para el timeline
- *  - GET /api/cameras/:id/stream - URLs de streaming (WebRTC/MSE) vía go2rtc
+  *  - POST /api/cameras/:id/push   - Push de movimiento de la cámara (NVR)
+  *  - GET /api/cameras/:id/stream - URLs de streaming (WebRTC/MSE) vía go2rtc
  *  - GET /api/push/vapid-public-key - Clave pública VAPID (o null)
  *  - POST /api/push/subscribe - Suscribe un endpoint Web Push
  *  - POST /api/push/unsubscribe - Quita una suscripción por endpoint
@@ -81,7 +80,6 @@ const mqttClient = require('./mqtt/client');
 const videosRouter = require('./routes/videos');
 const camerasRouter = require('./routes/cameras');
 const cameraStatusRouter = require('./routes/camera-status');
-const timelineRouter = require('./routes/timeline');
 const streamRouter = require('./routes/stream');
 const pushRouter = require('./routes/push');
 const storageRouter = require('./routes/storage');
@@ -166,7 +164,6 @@ app.get('/api/health', (req, res) => {
 app.use('/api', videosRouter);
 app.use('/api', camerasRouter);
 app.use('/api', cameraStatusRouter);
-app.use('/api', timelineRouter);
 app.use('/api', streamRouter);
 app.use('/api', pushRouter);
 app.use('/api', storageRouter);
@@ -314,7 +311,6 @@ async function startServices() {
             console.log(`         POST /api/cameras/group/power`);
             console.log(`         GET /api/cameras/:id/status`);
             console.log(`         POST /api/cameras/:id/{reboot,httpd,push}`);
-            console.log(`         GET /api/timeline`);
             console.log(`         GET /api/cameras/:id/stream`);
             console.log(`         GET /api/push/vapid-public-key`);
             console.log(`         POST /api/push/subscribe`);
