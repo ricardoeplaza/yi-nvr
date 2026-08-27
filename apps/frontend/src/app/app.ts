@@ -12,6 +12,6 @@ import { AppFooter } from './shared/app-footer/app-footer';
     </main>
     <yi-app-footer />
   `,
-  styleUrl: './app.component.scss'
+  styleUrl: './app.scss'
 })
-export class AppComponent {}
+export class App {}

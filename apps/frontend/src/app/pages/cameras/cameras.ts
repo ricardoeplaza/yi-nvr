@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { CameraCard } from '../../shared/camera-card/camera-card';
-import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
+import { EmptyState } from '../../shared/empty-state/empty-state';
 import { AppHeader } from '../../shared/app-header/app-header';
 import { CameraService } from '../../services/camera.service';
 import { PowerService } from '../../services/power.service';
@@ -8,7 +8,7 @@ import { Camera } from '../../models/camera.model';
 
 @Component({
   selector: 'yi-cameras',
-  imports: [CameraCard, EmptyStateComponent, AppHeader],
+  imports: [CameraCard, EmptyState, AppHeader],
   templateUrl: './cameras.html',
   styleUrl: './cameras.scss',
 })

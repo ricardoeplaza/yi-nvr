@@ -12,9 +12,9 @@ import { Component, input } from '@angular/core';
       }
     </div>
   `,
-  styleUrl: './empty-state.component.scss'
+  styleUrl: './empty-state.scss'
 })
-export class EmptyStateComponent {
+export class EmptyState {
   icon = input('📹');
   title = input('Sin contenido');
   subtitle = input('');
