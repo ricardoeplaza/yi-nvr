@@ -21,9 +21,11 @@ export class VideoService {
     if (params.startDate !== undefined) httpParams = httpParams.set('startDate', params.startDate);
     if (params.endDate !== undefined) httpParams = httpParams.set('endDate', params.endDate);
     if (params.q !== undefined) httpParams = httpParams.set('q', params.q);
-    if (params.favorite !== undefined) httpParams = httpParams.set('favorite', params.favorite.toString());
+    if (params.favorite !== undefined)
+      httpParams = httpParams.set('favorite', params.favorite.toString());
     if (params.limit !== undefined) httpParams = httpParams.set('limit', params.limit.toString());
-    if (params.offset !== undefined) httpParams = httpParams.set('offset', params.offset.toString());
+    if (params.offset !== undefined)
+      httpParams = httpParams.set('offset', params.offset.toString());
     return this.http.get<{ success: boolean; count: number; data: Video[] }>('/api/videos', {
       params: httpParams,
     });
@@ -41,7 +43,8 @@ export class VideoService {
     if (params.startDate !== undefined) httpParams = httpParams.set('startDate', params.startDate);
     if (params.endDate !== undefined) httpParams = httpParams.set('endDate', params.endDate);
     if (params.q !== undefined) httpParams = httpParams.set('q', params.q);
-    if (params.favorite !== undefined) httpParams = httpParams.set('favorite', params.favorite.toString());
+    if (params.favorite !== undefined)
+      httpParams = httpParams.set('favorite', params.favorite.toString());
     return this.http.get<{ success: boolean; count: number }>('/api/videos/count', {
       params: httpParams,
     });
@@ -52,14 +55,16 @@ export class VideoService {
   }
 
   purgeVideos(req: {
-    scope: 'day' | 'week' | 'month' | 'range';
+    scope: 'day' | 'week' | 'month' | 'range' | 'all';
     from?: string;
     to?: string;
   }): Observable<{ success: boolean; expected: number; purged: string[]; failed: string[] }> {
-    return this.http.post<{ success: boolean; expected: number; purged: string[]; failed: string[] }>(
-      '/api/videos/purge',
-      req
-    );
+    return this.http.post<{
+      success: boolean;
+      expected: number;
+      purged: string[];
+      failed: string[];
+    }>('/api/videos/purge', req);
   }
 
   getVideo(id: number): Observable<{ success: boolean; data: Video }> {
@@ -67,10 +72,35 @@ export class VideoService {
   }
 
   setFavorite(id: number, favorite: boolean): Observable<{ success: boolean; favorite: boolean }> {
-    return this.http.post<{ success: boolean; favorite: boolean }>(`/api/videos/${id}/favorite`, { favorite });
+    return this.http.post<{ success: boolean; favorite: boolean }>(`/api/videos/${id}/favorite`, {
+      favorite,
+    });
   }
 
   deleteVideo(id: number): Observable<{ success: boolean; message: string }> {
     return this.http.delete<{ success: boolean; message: string }>(`/api/videos/${id}`);
+  }
+
+  // El API devuelve los ids como string (ver routes/videos.js).
+  bulkDelete(ids: number[]): Observable<{ success: boolean; deleted: string[]; failed: string[] }> {
+    return this.http.post<{ success: boolean; deleted: string[]; failed: string[] }>(
+      '/api/videos/bulk-delete',
+      {
+        ids,
+      },
+    );
+  }
+
+  bulkFavorite(
+    ids: number[],
+    favorite: boolean,
+  ): Observable<{ success: boolean; updated: string[]; failed: string[] }> {
+    return this.http.post<{ success: boolean; updated: string[]; failed: string[] }>(
+      '/api/videos/bulk-favorite',
+      {
+        ids,
+        favorite,
+      },
+    );
   }
 }

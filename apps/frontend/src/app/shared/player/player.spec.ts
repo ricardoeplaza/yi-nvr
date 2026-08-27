@@ -301,6 +301,69 @@ describe('Player', () => {
     });
   });
 
+  describe('creación condicional (regresión)', () => {
+    it('asigna el src aunque el video se pase al crear el componente', () => {
+      // Simula la galería: <yi-player> creado dentro de @if, ya con el video
+      // seleccionado (el input se fija ANTES de la primera detección de cambios).
+      // El src se asigna de forma declarativa en la plantilla; la reproducción
+      // la arranca el atributo autoplay (el effect se ejecuta antes de que se
+      // resuelva @ViewChild, así que no puede depender de él para el src).
+      fixture.destroy();
+      fixture = TestBed.createComponent(Player);
+      component = fixture.componentInstance;
+      const v = fixture.nativeElement.querySelector('video') as HTMLVideoElement;
+      v.play = vi.fn(() => Promise.resolve());
+      v.pause = vi.fn();
+      v.load = vi.fn();
+      fixture.componentRef.setInput('video', makeVideo());
+      fixture.detectChanges();
+      expect(v.getAttribute('src')).toContain('clip1.mp4');
+    });
+  });
+
+  describe('aspect ratio adaptativo', () => {
+    function videoWrap(): HTMLElement {
+      return host.querySelector('.video-wrap') as HTMLElement;
+    }
+
+    function setIntrinsicSize(w: number, h: number) {
+      Object.defineProperty(videoEl, 'videoWidth', { configurable: true, value: w });
+      Object.defineProperty(videoEl, 'videoHeight', { configurable: true, value: h });
+      videoEl.dispatchEvent(new Event('loadedmetadata'));
+    }
+
+    it('modo por defecto: sin aspect-ratio inline (rige el CSS 4/3.15)', () => {
+      fixture.componentRef.setInput('video', makeVideo());
+      fixture.detectChanges();
+      expect(videoWrap().style.aspectRatio).toBe('');
+      expect(videoWrap().classList.contains('adaptive')).toBe(false);
+    });
+
+    it('adaptiveRatio=true: arranca en 16/9 y adopta el ratio real en loadedmetadata', () => {
+      fixture.componentRef.setInput('adaptiveRatio', true);
+      fixture.componentRef.setInput('video', makeVideo());
+      fixture.detectChanges();
+      expect(videoWrap().style.aspectRatio).toBe('16 / 9');
+      expect(videoWrap().classList.contains('adaptive')).toBe(true);
+      setIntrinsicSize(1280, 720);
+      fixture.detectChanges();
+      expect(videoWrap().style.aspectRatio).toBe('1280 / 720');
+    });
+
+    it('al cambiar de clip el ratio vuelve a 16/9 hasta los nuevos metadatos', () => {
+      fixture.componentRef.setInput('adaptiveRatio', true);
+      fixture.componentRef.setInput('video', makeVideo());
+      fixture.detectChanges();
+      setIntrinsicSize(1280, 720);
+      fixture.detectChanges();
+      expect(videoWrap().style.aspectRatio).toBe('1280 / 720');
+      const other = { ...makeVideo(), id: 2, original_url: 'https://example.com/clips/clip2.mp4' };
+      fixture.componentRef.setInput('video', other);
+      fixture.detectChanges();
+      expect(videoWrap().style.aspectRatio).toBe('16 / 9');
+    });
+  });
+
   describe('modo live', () => {
     it('arranca silenciado y emite loading/error (sin WHEP ni MSE en jsdom)', async () => {
       const statuses: string[] = [];

@@ -1,0 +1,27 @@
+<div class="sheet-backdrop" [class.show]="open()" (click)="close.emit()"></div>
+<div class="sheet" [class.show]="open()">
+  <div class="sheet-handle"></div>
+  <h2>Retención y borrado automático</h2>
+  <p class="desc">Elige a partir de qué antigüedad se purgan los clips automáticamente.</p>
+  <div class="segmented" role="group" aria-label="Alcance del borrado">
+    <button type="button" [class.is-selected]="scope() === 'day'" (click)="scopeChange.emit('day')">+1 día</button>
+    <button type="button" [class.is-selected]="scope() === 'week'" (click)="scopeChange.emit('week')">+1 semana</button>
+    <button type="button" [class.is-selected]="scope() === 'month'" (click)="scopeChange.emit('month')">+1 mes</button>
+    <button type="button" [class.is-selected]="scope() === 'all'" (click)="scopeChange.emit('all')">Todo</button>
+  </div>
+  <div class="purge-preview">
+    <span>Clips que se eliminarían ahora</span>
+    <b>{{ expected() ?? '…' }}</b>
+  </div>
+  <div class="sheet-row">
+    <span class="label">Espacio usado</span>
+    <span class="value">{{ usedLabel() }}</span>
+  </div>
+  <div class="sheet-row">
+    <span class="label">Clips guardados</span>
+    <span class="value">{{ storageCount() ?? '…' }}</span>
+  </div>
+  <button class="purge-btn" [disabled]="purging() || (expected() ?? 0) <= 0" (click)="purge.emit()">
+    {{ purging() ? 'Borrando…' : 'Purgar clips ahora' }}
+  </button>
+</div>

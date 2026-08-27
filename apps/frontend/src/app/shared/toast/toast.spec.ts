@@ -1,20 +1,20 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { ToastComponent } from './toast.component';
+import { Toast } from './toast';
 import { ToastService } from './toast.service';
 
-describe('ToastComponent', () => {
-  let component: ToastComponent;
-  let fixture: ComponentFixture<ToastComponent>;
+describe('Toast', () => {
+  let component: Toast;
+  let fixture: ComponentFixture<Toast>;
   let host: HTMLElement;
   let service: ToastService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [ToastComponent],
+      imports: [Toast],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(ToastComponent);
+    fixture = TestBed.createComponent(Toast);
     component = fixture.componentInstance;
     host = fixture.nativeElement;
     service = TestBed.inject(ToastService);

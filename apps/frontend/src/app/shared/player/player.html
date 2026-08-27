@@ -1,10 +1,11 @@
 <div class="player" #playerEl (pointermove)="pokeControls()" (pointerdown)="pokeControls()">
-  <div class="video-wrap" (click)="togglePlay()">
+  <div class="video-wrap" [class.adaptive]="adaptiveRatio()" [style.aspect-ratio]="wrapAspectRatio()" (click)="togglePlay()">
     <video
       #videoEl
       playsinline
       muted
       autoplay
+      [attr.src]="video()?.original_url"
       (play)="onVideoPlay()"
       (pause)="onVideoPause()"
       (timeupdate)="onTimeUpdate()"

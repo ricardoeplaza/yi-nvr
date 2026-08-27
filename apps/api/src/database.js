@@ -222,18 +222,31 @@ function countVideos(filters = {}) {
  *
  * from/to: strings ISO 8601 UTC (p. ej. '2026-08-01T00:00:00.000Z'), el
  * mismo formato en el que se guarda la columna timestamp; la comparación
- * lexicográfica coincide con el orden cronológico.
+ * lexicográfica coincide con el orden cronológico. Ambos son OPCIONALES
+ * (se requiere al menos uno):
+ *  - from ausente → sin límite inferior
+ *  - to ausente → sin límite superior
  *
  * SIEMPRE excluye los favoritos (favorite = 0).
- * @param {{from: string, to: string}} range - Rango de timestamps (inclusive)
+ * @param {{from?: string, to?: string}} range - Rango de timestamps (inclusive)
  * @returns {Array} - Filas de videos borradas de la BD
  */
-function purgeVideos({ from, to }) {
+function purgeVideos({ from, to } = {}) {
+    const conditions = ['favorite = 0'];
+    const params = {};
+    if (from !== undefined && from !== null) {
+        conditions.push('timestamp >= @from');
+        params.from = from;
+    }
+    if (to !== undefined && to !== null) {
+        conditions.push('timestamp <= @to');
+        params.to = to;
+    }
     const select = db.prepare(`
         SELECT * FROM videos
-        WHERE timestamp >= @from AND timestamp <= @to AND favorite = 0
+        WHERE ${conditions.join(' AND ')}
     `);
-    const videos = select.all({ from, to });
+    const videos = select.all(params);
 
     if (videos.length) {
         const removeMany = db.transaction(rows => {
@@ -345,6 +358,60 @@ function deleteVideo(id) {
     const stmt = db.prepare('DELETE FROM videos WHERE id = ?');
     const result = stmt.run(id);
     return result.changes > 0;
+}
+
+/**
+ * Gets the video rows for the given ids (IN clause). Ids that do not exist
+ * are simply not returned.
+ * @param {number[]} ids - Video ids to look up
+ * @returns {Array} - Matching video rows (with paths), at most one per id
+ */
+function bulkGetVideos(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return [];
+    }
+    const placeholders = ids.map(() => '?').join(', ');
+    const stmt = db.prepare(`SELECT * FROM videos WHERE id IN (${placeholders})`);
+    return stmt.all(...ids);
+}
+
+/**
+ * Deletes the given video ids from the DB in a single transaction and
+ * returns the deleted rows (with paths) so the caller can remove the
+ * physical files. Ids that do not exist are ignored.
+ * @param {number[]} ids - Video ids to delete
+ * @returns {Array} - Deleted video rows (with paths), at most one per id
+ */
+function bulkDeleteVideos(ids) {
+    const rows = bulkGetVideos(ids);
+    if (rows.length === 0) {
+        return [];
+    }
+    const removeMany = db.transaction(list => {
+        const del = db.prepare('DELETE FROM videos WHERE id = ?');
+        list.forEach(row => del.run(row.id));
+    });
+    removeMany(rows);
+    return rows;
+}
+
+/**
+ * Sets the favorite flag on multiple videos in a single transaction.
+ * Ids that do not exist are ignored.
+ * @param {number[]} ids - Video ids to update
+ * @param {boolean} favorite - true to mark as favorite, false to unmark
+ * @returns {number} - Number of rows actually updated (changes)
+ */
+function bulkSetFavorite(ids, favorite) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return 0;
+    }
+    const placeholders = ids.map(() => '?').join(', ');
+    const run = db.transaction(() => {
+        const stmt = db.prepare(`UPDATE videos SET favorite = ? WHERE id IN (${placeholders})`);
+        return stmt.run(favorite ? 1 : 0, ...ids).changes;
+    });
+    return run();
 }
 
 // ============================================
@@ -513,6 +580,9 @@ module.exports = {
     updateVideo,
     setVideoFavorite,
     deleteVideo,
+    bulkGetVideos,
+    bulkDeleteVideos,
+    bulkSetFavorite,
     upsertPushSubscription,
     getPushSubscription,
     getAllPushSubscriptions,

@@ -9,6 +9,8 @@
  *  - GET /videos/:id - Detalle de un video específico
  *  - PATCH /videos/:id - Actualiza el nombre personalizado (name)
  *  - POST /videos/:id/favorite - Marca/desmarca un video como favorito
+ *  - POST /videos/bulk-delete - Borra varios videos y sus archivos físicos
+ *  - POST /videos/bulk-favorite - Marca/desmarca varios videos como favoritos
  *  - POST /videos/purge - Borra videos por retención/rango (excluye favoritos)
  *  - DELETE /videos/:id - Elimina un video y sus archivos físicos
  */
@@ -16,7 +18,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { getVideos, countVideos, purgeVideos, getVideoById, setVideoFavorite, updateVideo, deleteVideo } = require('../database');
+const { getVideos, countVideos, purgeVideos, getVideoById, setVideoFavorite, updateVideo, deleteVideo, bulkGetVideos, bulkDeleteVideos, bulkSetFavorite } = require('../database');
 const { DATA_DIR, RECORDINGS_DIR } = require('../paths');
 
 // Retención de purge: mismos valores que el frontend (storage.page.ts).
@@ -231,12 +233,139 @@ router.patch('/videos/:id', (req, res) => {
 });
 
 /**
+ * Validates a bulk ids payload shared by the bulk endpoints.
+ * @param {unknown} ids - Expected: non-empty array of integers, max 500
+ * @returns {number[]|null} - Clean integer ids, or null when invalid
+ */
+function parseBulkIds(ids) {
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 500) {
+        return null;
+    }
+    const clean = [];
+    for (const value of ids) {
+        const num = Number(value);
+        if (!Number.isInteger(num)) {
+            return null;
+        }
+        clean.push(num);
+    }
+    return clean;
+}
+
+/**
+ * Removes the physical files (original, thumbnail, preview) of the given
+ * video rows, using the same tolerant pattern as DELETE /videos/:id:
+ * resolveStoredPath + unlink, ENOENT/missing file is benign, any unlink
+ * error marks the row as failed (the DB row is deleted regardless).
+ * @param {Array} rows - Video rows with original_path/thumbnail_path/preview_path
+ * @returns {{deleted: string[], failed: string[]}} - deleted = all processed
+ *   ids; failed = subset of deleted where at least one unlink errored
+ */
+function removeVideoFiles(rows) {
+    const deleted = [];
+    const failed = [];
+    rows.forEach(video => {
+        let ok = true;
+        [video.original_path, video.thumbnail_path, video.preview_path].forEach(filePath => {
+            if (!filePath) {
+                return;
+            }
+            const marker = filePath.includes(path.sep + 'processed') ? 'processed' : 'ftp';
+            const resolved = resolveStoredPath(filePath, marker);
+            if (fs.existsSync(resolved)) {
+                try {
+                    fs.unlinkSync(resolved);
+                } catch (err) {
+                    console.error(`[Videos] Error removing file ${resolved}:`, err.message);
+                    ok = false;
+                }
+            }
+        });
+        deleted.push(String(video.id));
+        if (!ok) {
+            failed.push(String(video.id));
+        }
+        console.log(`[Videos] Bulk: video ${video.id} ${ok ? 'files removed' : 'removed with file errors'}`);
+    });
+    return { deleted, failed };
+}
+
+/**
+ * POST /api/videos/bulk-delete
+ *
+ * Deletes multiple videos at once (DB rows + physical files).
+ * Body: { ids: number[] } — non-empty array of integers, max 500.
+ * Ids that do not exist in the DB are silently ignored (not an error).
+ * Response 200: { success: true, deleted: string[], failed: string[] }
+ *  - deleted: ids whose video was removed (row deleted + file attempts made)
+ *  - failed:  subset of deleted where at least one file unlink errored
+ *    (the row is still deleted, same behavior as purge)
+ * Response 400: { success: false, error } when ids are invalid.
+ */
+router.post('/videos/bulk-delete', (req, res) => {
+    try {
+        const ids = parseBulkIds((req.body || {}).ids);
+        if (!ids) {
+            return res.status(400).json({ success: false, error: 'ids must be a non-empty array of integers (max 500)' });
+        }
+
+        const existing = bulkGetVideos(ids);
+        const rows = bulkDeleteVideos(existing.map(video => video.id));
+        const { deleted, failed } = removeVideoFiles(rows);
+
+        console.log(`[Videos] Bulk delete: ${deleted.length} deleted, ${failed.length} with file errors`);
+        res.json({ success: true, deleted, failed });
+    } catch (error) {
+        console.error('[Videos] Error in bulk delete:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * POST /api/videos/bulk-favorite
+ *
+ * Sets or clears the favorite flag on multiple videos.
+ * Body: { ids: number[], favorite: boolean } — ids as in bulk-delete.
+ * Ids that do not exist in the DB are silently ignored (not an error).
+ * Response 200: { success: true, updated: string[], failed: string[] }
+ *  - updated: existing ids whose favorite flag was set
+ *  - failed:  ids that could not be updated (normally empty; the UPDATE is
+ *    atomic over all existing ids)
+ * Response 400: { success: false, error } when ids or favorite are invalid.
+ */
+router.post('/videos/bulk-favorite', (req, res) => {
+    try {
+        const body = req.body || {};
+        const ids = parseBulkIds(body.ids);
+        if (!ids) {
+            return res.status(400).json({ success: false, error: 'ids must be a non-empty array of integers (max 500)' });
+        }
+        if (typeof body.favorite !== 'boolean') {
+            return res.status(400).json({ success: false, error: 'favorite must be a boolean' });
+        }
+
+        const existing = bulkGetVideos(ids).map(video => video.id);
+        const updatedCount = bulkSetFavorite(existing, body.favorite);
+        const updated = existing.map(String);
+        const failed = [];
+
+        console.log(`[Videos] Bulk favorite: ${updatedCount} of ${updated.length} video(s) set favorite=${body.favorite}`);
+        res.json({ success: true, updated, failed });
+    } catch (error) {
+        console.error('[Videos] Error in bulk favorite:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
  * POST /api/videos/purge
  *
  * Borra videos por retención, excluyendo SIEMPRE los favoritos.
- * Body: { scope: 'day' | 'week' | 'month' | 'range', from?: string, to?: string }
+ * Body: { scope: 'day' | 'week' | 'month' | 'range' | 'all', from?: string, to?: string }
  *  - day/week/month: borra lo anterior a (now - SCOPE_MS[scope])
  *  - range: borra en [from, to] (ISO 8601, ambos inclusivos)
+ *  - all: borra TODO (sin límite inferior, to = now); los favoritos
+ *    sobreviven (garantizado por purgeVideos)
  * Respuesta: { success, expected, purged: string[], failed: string[] }
  * (purged/failed contienen los ids de los videos).
  */
@@ -251,6 +380,9 @@ router.post('/videos/purge', (req, res) => {
                 from: new Date(0).toISOString(),
                 to: new Date(Date.now() - SCOPE_MS[scope]).toISOString()
             };
+        } else if (scope === 'all') {
+            // Sin límite inferior: borra todo lo no favorito hasta ahora.
+            range = { to: new Date().toISOString() };
         } else if (scope === 'range') {
             const fromMs = Date.parse(from);
             const toMs = Date.parse(to);
@@ -259,7 +391,7 @@ router.post('/videos/purge', (req, res) => {
             }
             range = { from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString() };
         } else {
-            return res.status(400).json({ success: false, error: 'scope inválido (day, week, month o range)' });
+            return res.status(400).json({ success: false, error: 'scope inválido (day, week, month, range o all)' });
         }
 
         // purgeVideos ya excluye favoritos y borra las filas de la BD;

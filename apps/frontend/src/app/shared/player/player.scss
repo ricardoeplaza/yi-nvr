@@ -37,6 +37,12 @@
     display: block;
     background: #000;
   }
+
+  // Modo adaptivo: letterbox en vez de recorte (mientras el ratio es el
+  // fallback 16/9 y el clip no lo es; cuando coincide, contain == cover).
+  &.adaptive video {
+    object-fit: contain;
+  }
 }
 
 /* ---------- SCRIM SUPERIOR ---------- */

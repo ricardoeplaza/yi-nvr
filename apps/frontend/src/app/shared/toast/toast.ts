@@ -19,9 +19,9 @@ import { ToastService } from './toast.service';
       <span class="toast-message">{{ message() }}</span>
     </div>
   `,
-  styleUrl: './toast.component.scss',
+  styleUrl: './toast.scss',
 })
-export class ToastComponent {
+export class Toast {
   private readonly service = inject(ToastService);
 
   protected readonly state = this.service.state;
