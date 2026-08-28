@@ -11,7 +11,7 @@ describe('PowerService', () => {
   let toastShowSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    setPowerSpy = vi.fn(() => of({ success: true, published: true, payload: null }));
+    setPowerSpy = vi.fn(() => of({ success: true, applied: true, key: 'switch_on', value: 'yes' }));
     toastShowSpy = vi.fn();
     TestBed.configureTestingModule({
       providers: [

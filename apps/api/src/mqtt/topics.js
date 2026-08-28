@@ -12,10 +12,6 @@
  *   <prefix>/<motion_files>    → lista de archivos al terminar un motion
  *   <prefix>/<sound_detection> → "sound"
  *
- *  SALIDA (el NVR publica, QoS 1):
- *   <prefix>/cmnd/camera/<cmd> → comando (on/off, yes/no, low|medium|high, ...)
- *   Payload vacío a <prefix>/cmnd/camera = ping de sync (la cámara re-publica estado)
- *
  *  FEEDBACK (la cámara re-publica el estado aplicado):
  *   <prefix>/stat/camera/<cmd>
  *
@@ -84,7 +80,7 @@ function resolveWithOverrides(camera, defaults, configKey) {
  * @param {Object} camera - Objeto de cámara del registro
  * @returns {{birth_will: string, motion: string, motion_image: string,
  *            motion_files: string, sound_detection: string,
- *            stat: string, cmnd: string}}
+ *            stat: string}}
  * @throws {Error} - Si la cámara no tiene mqtt_prefix
  */
 function getTopics(camera) {
@@ -101,9 +97,7 @@ function getTopics(camera) {
         motion_files: `${p}/${t.motion_files}`,
         sound_detection: `${p}/${t.sound_detection}`,
         // Feedback de estado: la cámara re-publica cada comando aplicado
-        stat: `${p}/stat/camera/+`,
-        // Base de comandos; commandTopic() añade el suffix
-        cmnd: `${p}/cmnd/camera`
+        stat: `${p}/stat/camera/+`
     };
 }
 
@@ -115,23 +109,6 @@ function getTopics(camera) {
  */
 function getMessages(camera) {
     return resolveWithOverrides(camera, DEFAULT_MESSAGES, 'mqtt_messages');
-}
-
-/**
- * Devuelve el tema de comando para un comando concreto. Sin `command`
- * devuelve la base `<prefix>/cmnd/camera` (para el ping de sync con
- * payload vacío que hace re-publicar TODO el estado de la cámara).
- * @param {Object} camera - Objeto de cámara del registro
- * @param {string} [command] - Suffix del comando (p. ej. "led", "switch_on")
- * @returns {string} - p. ej. "yi-oficina/cmnd/camera/led"
- */
-function commandTopic(camera, command) {
-    if (!camera.mqtt_prefix) {
-        throw new Error(`La cámara "${camera.id}" no tiene mqtt_prefix configurado`);
-    }
-    return command
-        ? `${camera.mqtt_prefix}/cmnd/camera/${command}`
-        : `${camera.mqtt_prefix}/cmnd/camera`;
 }
 
 /**
@@ -190,6 +167,5 @@ module.exports = {
     DEFAULT_MESSAGES,
     getTopics,
     getMessages,
-    commandTopic,
     matchEvent
 };

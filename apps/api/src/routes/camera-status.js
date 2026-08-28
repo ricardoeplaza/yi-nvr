@@ -2,9 +2,15 @@
  * routes/camera-status.js
  *
  * Router de la API para el estado REAL y el control remoto de una cámara
- * (se monta en /api). A diferencia de routes/cameras.js (comandos MQTT),
- * aquí el API actúa como proxy HTTP contra los CGI de la cámara (yi-hack):
- * el frontend nunca conoce la IP de la cámara, solo habla con el API.
+ * (se monta en /api). El API actúa como proxy HTTP contra los CGI de la
+ * cámara (yi-hack): el frontend nunca conoce la IP de la cámara, solo habla
+ * con el API.
+ *
+ * Esta ruta SOLO compone: resuelve la cámara y su adapter (resolveCameraFor,
+ * ver camera/index.js) y compone el estado (buildCameraStatus, ver
+ * camera-status-service.js). Toda la lógica de dispositivo (probes HTTP,
+ * caché de probes, escritura CGI, timeouts) vive en el adapter
+ * (camera/adapters/yi-hack.js).
  *
  * IMPORTANTE: los CGI de yi-hack viven bajo el prefijo `/cgi-bin/` (así
  * los invoca la UI oficial de la cámara, verificado en htdocs/js/modules/*.js
@@ -13,8 +19,8 @@
  * Ecosistemas (campo `ecosystem` de cameras.json; default "generic", ver
  * camera-registry.js):
  *  - "yi-hack": firmware yi-hack; se puede consultar TODO (status.json,
- *    get_configs.sh, SD, WiFi, uptime) y enviarle controles (reboot, httpd,
- *    MQTT). Comportamiento clásico de este router.
+ *    get_configs.sh, SD, WiFi, uptime) y enviarle controles (reboot,
+ *    httpd). Comportamiento clásico de este router.
  *  - "generic": el resto (p. ej. Tuya): NO se le hace NINGÚN fetch ni
  *    comando al dispositivo. El API devuelve solo lo que el NVR ya indexa:
  *    IP, nº de videos, último video y últimos eventos de la BD de clips.
@@ -26,7 +32,7 @@
  *  - id, host, ecosystem ("yi-hack" | "generic")
  *  - capabilities: qué secciones puede mostrar el frontend:
  *      live_status → state/http/mqtt/status/camera_config/system_config
- *      controls    → endpoints de control (reboot, httpd, MQTT...)
+ *      controls    → endpoints de control (reboot, httpd)
  *      sd          → sección SD
  *      wifi        → WiFi (wlan_essid/wlan_strength de status.json)
  *      system      → fw/uptime/memoria (status.json + system_config)
@@ -58,8 +64,8 @@
  *    MQTT dice "online", el estado es "on" con http=false (la cámara está
  *    viva; solo falta su servidor HTTP). En ese caso camera_config se
  *    rellena con el último feedback stat/camera/<cmd> (MQTT) para que los
- *    toggles muestren el estado real, y se envía un ping de sync (payload
- *    vacío a cmnd/camera) si aún no hay feedback.
+ *    toggles muestren el estado real (si aún no hay feedback, se queda
+ *    null).
  *  - POST /cameras/:id/reboot - Reinicia la cámara (CGI reboot.sh).
  *    SOLO yi-hack (generic → 409).
  *  - POST /cameras/:id/httpd  - HTTPD yes/no (set_configs.sh?conf=system).
@@ -71,21 +77,48 @@
  *    AMBOS ecosistemas: es un ajuste del NVR, no un control del dispositivo.
  *
  * Errores: cámara desconocida 404; sin host 400 (yi-hack); control no
- * soportado por el ecosistema 409 (reboot/httpd a una generic); cámara no
- * alcanzable 502 (en los POST yi-hack). El proxy HTTP hacia la cámara usa
- * fetch nativo con timeout de 3 s por petición (la cámara responde en <1 s;
- * 3 s es margen para WiFi lento sin congelar la UI).
+ * soportado por el ecosistema 409 (reboot/httpd a una generic; lo responde
+ * resolveCameraFor); cámara no alcanzable 502 (en los POST yi-hack). Los
+ * fetch hacia la cámara los hace el adapter con timeouts por operación
+ * (probes/reboot 3 s, set_configs.sh?conf=system 15 s; ver la cabecera de
+ * camera/adapters/yi-hack.js).
  */
 
 const express = require('express');
 const registry = require('../camera-registry');
 const { setCameraPushEnabled } = require('../database');
-const {
-    fetchCameraJson,
-    buildCameraStatus
-} = require('../camera-status-service');
+const { resolveCameraFor } = require('../camera');
+const { buildCameraStatus } = require('../camera-status-service');
 
 const router = express.Router();
+
+/**
+ * Mensaje 409 de controles remotos (literal: el frontend lo aserta en
+ * camera-detail.page.spec.ts).
+ * @param {Object} cam - Cámara del registro
+ * @returns {string}
+ */
+function unsupportedControlsMessage(cam) {
+    return `la cámara "${cam.id}" es de ecosistema "${registry.getEcosystem(cam)}": no admite controles remotos (solo datos del NVR)`;
+}
+
+/**
+ * Resuelve la cámara de req.params.id y su adapter para un endpoint de
+ * control, pasando a resolveCameraFor el mensaje 409 de controles remotos.
+ * @param {Object} req - Request de Express (usa req.params.id)
+ * @param {Object} res - Response de Express (responde él los errores)
+ * @param {string} method - Método del adapter que la ruta va a llamar
+ * @returns {{cam: Object, adapter: Object}|null} - null si ya respondió
+ */
+function resolveControl(req, res, method) {
+    const cam = registry.getCameraById(req.params.id);
+    return resolveCameraFor(
+        req,
+        res,
+        method,
+        cam ? unsupportedControlsMessage(cam) : undefined
+    );
+}
 
 /**
  * GET /api/cameras/:id/status
@@ -125,30 +158,17 @@ router.get('/cameras/:id/status', async (req, res) => {
  * handshake HTTP, el reboot ya está en marcha.
  */
 router.post('/cameras/:id/reboot', async (req, res) => {
+    const r = resolveControl(req, res, 'reboot');
+    if (!r) return;
     try {
-        const cam = registry.getCameraById(req.params.id);
-        if (!cam) {
-            return res.status(404).json({ success: false, error: 'cámara no encontrada' });
-        }
-        if (registry.getEcosystem(cam) !== 'yi-hack') {
-            return res.status(409).json({
-                success: false,
-                error: `la cámara "${cam.id}" es de ecosistema "${registry.getEcosystem(cam)}": no admite controles remotos (solo datos del NVR)`
-            });
-        }
-        if (!cam.host) {
-            return res.status(400).json({ success: false, error: 'la cámara no tiene host configurado' });
-        }
-        try {
-            await fetchCameraJson(`http://${cam.host}/cgi-bin/reboot.sh`);
-        } catch (e) {
-            return res.status(502).json({ success: false, error: 'cámara no alcanzable' });
-        }
-        res.json({ success: true, rebooted: true });
-    } catch (error) {
-        console.error('[API] Error al reiniciar cámara:', error.message);
-        res.status(500).json({ success: false, error: error.message });
+        // El adapter invalida la caché de probes en éxito (el estado
+        // cacheado tras un reboot es inservible; la próxima lectura sondea
+        // de nuevo). Si el fetch falla, el error crudo se mapea a 502.
+        await r.adapter.reboot(r.cam);
+    } catch (e) {
+        return res.status(502).json({ success: false, error: 'cámara no alcanzable' });
     }
+    res.json({ success: true, rebooted: true });
 });
 
 /**
@@ -164,38 +184,20 @@ router.post('/cameras/:id/httpd', async (req, res) => {
     if (typeof enabled !== 'boolean') {
         return res.status(400).json({ success: false, error: 'enabled debe ser booleano' });
     }
+    const r = resolveControl(req, res, 'setHttpd');
+    if (!r) return;
     try {
-        const cam = registry.getCameraById(req.params.id);
-        if (!cam) {
-            return res.status(404).json({ success: false, error: 'cámara no encontrada' });
-        }
-        if (registry.getEcosystem(cam) !== 'yi-hack') {
-            return res.status(409).json({
-                success: false,
-                error: `la cámara "${cam.id}" es de ecosistema "${registry.getEcosystem(cam)}": no admite controles remotos (solo datos del NVR)`
-            });
-        }
-        if (!cam.host) {
-            return res.status(400).json({ success: false, error: 'la cámara no tiene host configurado' });
-        }
-        try {
-            await fetchCameraJson(`http://${cam.host}/cgi-bin/set_configs.sh?conf=system`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ HTTPD: enabled ? 'yes' : 'no' })
-            });
-        } catch (e) {
-            return res.status(502).json({ success: false, error: 'cámara no alcanzable' });
-        }
-        res.json({
-            success: true,
-            httpd: enabled ? 'yes' : 'no',
-            applied: 'next_boot'
-        });
-    } catch (error) {
-        console.error('[API] Error al cambiar HTTPD:', error.message);
-        res.status(500).json({ success: false, error: error.message });
+        // El adapter invalida la caché de probes en éxito (único punto de
+        // escritura de system.conf; ver cabecera del adapter).
+        await r.adapter.setHttpd(r.cam, enabled);
+    } catch (e) {
+        return res.status(502).json({ success: false, error: 'cámara no alcanzable' });
     }
+    res.json({
+        success: true,
+        httpd: enabled ? 'yes' : 'no',
+        applied: 'next_boot'
+    });
 });
 
 /**

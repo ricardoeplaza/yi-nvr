@@ -13,15 +13,14 @@
  *    (`mqttEvents`) para motion_start/ai_human/ai_vehicle/ai_animal.
  *    Una fase futura se suscribirá para notificaciones push; este módulo
  *    NO acopla nada de push.
- *  - `publish()` (QoS 1) para los comandos de salida (mqtt/commands.js).
  *
  * Degradación elegante (OBLIGATORIA para dev sin broker):
  *  - Si `MQTT_BROKER_URL` está vacío, el cliente no se inicia (warning).
  *  - Si el broker no está disponible, se loguea un warning y el servidor
  *    sigue vivo (HTTP/FTP funcionando); el cliente reintenta en background
  *    con backoff exponencial (1s → 2s → 4s ... máx 60s).
- *  - Mientras no hay conexión, `publish()` devuelve false (las rutas
- *    responden 503) y los eventos de las cámaras simplemente no llegan.
+ *  - Mientras no hay conexión, los eventos de las cámaras simplemente
+ *    no llegan.
  */
 
 const { EventEmitter } = require('events');
@@ -304,17 +303,6 @@ function stop() {
 }
 
 /**
- * Publica un payload en un tema (QoS 1).
- * @param {string} topic
- * @param {string} payload
- * @returns {boolean} - true si se aceptó la publicación, false si no hay conexión
- */
-function publish(topic, payload) {
-    if (!client || !connected) return false;
-    return client.publish(topic, payload, { qos: 1 });
-}
-
-/**
  * Estado de conexión (para /api/health y depuración).
  * @returns {{connected: boolean, brokerUrl: string}}
  */
@@ -326,7 +314,6 @@ module.exports = {
     mqttEvents,
     start,
     stop,
-    publish,
     isConnected: () => connected,
     getStatus,
     syncSubscriptions,

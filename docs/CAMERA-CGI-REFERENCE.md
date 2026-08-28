@@ -113,7 +113,7 @@ Todos vía `/cgi-bin/camera_settings.sh` (GET):
 | Seguimiento de movimiento | `motion_tracking=yes\|no` |
 | Detección de sonido | `sound_detection=yes\|no` |
 | Sensibilidad de sonido | `sound_sensitivity=30..90` |
-| Lloro de bebé (latchkey) | vía MQTT `cmnd/camera/baby_crying_detect` → `on\|off` *(verificado en repo)* |
+| Lloro de bebé (latchkey) | **NO en `camera_settings.sh`** — solo vía MQTT `cmnd/camera/baby_crying_detect` → `on\|off` (`ipc_cmd -B`, `validate.c`). El NVR no lo controla (su cliente MQTT solo se suscribe) y está fuera de la whitelist `COMMAND_VALUES` |
 
 **MQTT — eventos de alarma (input, cámara → nosotros):**
 - `<prefix>/<motion>` → `motion_start`, `motion_stop`, `human`, `vehicle`, `animal`, `crying`
@@ -127,7 +127,7 @@ Todos vía `/cgi-bin/camera_settings.sh` (GET):
 | Opción | Endpoint | Método | Parámetros |
 |---|---|---|---|
 | Grabar en SD al detectar movimiento | `/cgi-bin/camera_settings.sh` | GET | `save_video_on_motion=yes\|no` |
-| Grabación local continua | vía MQTT `cmnd/camera/local_record` | MQTT | `on\|off` *(verificado en repo)* |
+| Grabación local continua | **NO existe en este firmware** (ni en `camera_settings.sh` ni en `validate.c`; solo en el fork sonoff) | — | — |
 | Timelapse — listar | `/cgi-bin/timelapse.sh` | GET | `action=list` |
 | Timelapse — borrar | `/cgi-bin/timelapse.sh` | GET | `action=delete` · `file=<nombre>` |
 | Ver archivos timelapse | `/record/timelapse/<file>` | GET | — |
@@ -147,6 +147,10 @@ Todos vía `/cgi-bin/camera_settings.sh` (GET):
 `switch_on`, `save_video_on_motion`, `motion_detection`, `sensitivity`,
 `ai_human_detection`, `ai_vehicle_detection`, `ai_animal_detection`, `face_detection`,
 `motion_tracking`, `sound_detection`, `sound_sensitivity`, `led`, `ir`, `rotate`, `cruise`.
+
+Son las 15 keys que `camera_settings.sh` maneja (ver §10.3). El CGI responde
+SIEMPRE `{"error":"false"}` (éxito) o `{"error":"true"}` (query string
+inválido) e **ignora en silencio** las keys desconocidas.
 
 ### 7b. Sistema (`set_configs.sh?conf=system`)
 
@@ -212,14 +216,19 @@ Vía `set_configs.sh?conf=system` → `STATIC_IP`, `STATIC_MASK`, `STATIC_GW`,
 
 Publicar a `<prefix>/cmnd/camera/<cmd>`; respuesta en `<prefix>/stat/camera/<cmd>`.
 
-`<cmd>` ∈ whitelist del repo (`commands.js`):
+`<cmd>` ∈ whitelist del NVR (`COMMAND_VALUES` en el adapter = las 15 keys de
+`camera_settings.sh`, §10.3):
 `led`, `ir`, `rotate`, `motion_detection`, `save_video_on_motion`, `sound_detection`,
-`baby_crying_detect`, `ai_human_detection`, `ai_vehicle_detection`, `ai_animal_detection`,
-`face_detection`, `motion_tracking`, `local_record`, `switch_on`, `sensitivity`,
+`ai_human_detection`, `ai_vehicle_detection`, `ai_animal_detection`,
+`face_detection`, `motion_tracking`, `switch_on`, `sensitivity`,
 `sound_sensitivity`, `cruise`.
 
 Valores: `on`/`off` (o `yes`/`no`), `low`/`medium`/`high` (sensitivity),
 `30..90` (sound_sensitivity), `no`/`presets`/`360` (cruise).
+
+Nota (firmware v0.3.6, `validate.c`): la sección `camera` de la tabla MQTT
+además acepta `BABY_CRYING_DETECT` (`ipc_cmd -B`), que `camera_settings.sh`
+NO maneja; `local_record` NO existe en este firmware (solo en el fork sonoff).
 
 ### MQTT — estado (input, cámara → nosotros)
 
@@ -257,8 +266,11 @@ Valores: `on`/`off` (o `yes`/`no`), `low`/`medium`/`high` (sensitivity),
   `save.sh`, `load.sh`, `reboot.sh`, `reset.sh`, `proxy.sh`, `service.sh`.
 - **Solo de docs/wiki del firmware** (marcados *(no verificado)*): `record.sh`,
   `privacy.sh`, `getlastrecordedvideo.sh`, `speaker_file.sh`.
-- **Del repo yi-nvr** (whitelist MQTT + REST): `baby_crying_detect`, `local_record`,
-  y todas las rutas REST de §9.
+- **Del repo yi-nvr** (whitelist + REST): todas las rutas REST de §9.
+- **Del código del firmware** (v0.3.6, §10.3): `camera_settings.sh` completo
+  (15 keys, método GET, formato de respuesta, keys ignoradas en silencio),
+  `baby_crying_detect` (solo MQTT, `ipc_cmd -B`) y `local_record` (no existe
+  en este firmware).
 
 ## 10. Hallazgos del firmware (yi-hack-allwinner-v2 v0.3.6, del código fuente)
 
@@ -293,6 +305,55 @@ comando en el firmware para forzar el LED (no existe «IR force» separado del I
 | `switch_on`, `led`, `ir`, `save_video_on_motion`, `sensitivity`, etc. (MQTT/`camera_settings.sh`) | **Inmediata** | `ipc_cmd` envía mensajes runtime a la cola IPC; además `load.sh` re-aplica la conf persistida en cada boot |
 
 Regla de la UI: solo el control marcado con `*` requiere reinicio; el resto es inmediato.
+
+### 10.3 `camera_settings.sh` (verificado en el código, v0.3.6)
+
+Fuente: `src/www/httpd/cgi-bin/camera_settings.sh` + `validate.sh` +
+`src/mqtt-config/mqtt-config/validate.c` (repo `yi-hack-Allwinner-v2`,
+branch `master`).
+
+- **Método**: GET con query string `?key=value[&key=value...]` (el bucle del
+  CGI procesa hasta 15 parámetros; el UI oficial los envía en una sola
+  petición al guardar).
+- **Respuesta**: SIEMPRE JSON — `{"error":"false"}` en éxito y
+  `{"error":"true"}` solo si `validateQueryString`/`validateString` rechazan
+  el query string (caracteres `\'!"@#$%^*(),:;`).
+- **Keys desconocidas**: se ignoran en silencio (el `if/elif` no las
+  coincide y el script termina igual con `error:false`). `validate.sh` solo
+  valida seguridad de caracteres, NO la existencia de la key.
+- **Booleanos**: `yes`/`no` (el script compara `== "no"`; cualquier otro
+  valor se trata como on).
+
+| Key | Acción del CGI |
+|---|---|
+| `switch_on` | `ipc_cmd -t on/off`; off añade `ipc_cmd -T` (para el evento en curso) |
+| `save_video_on_motion` | `ipc_cmd -v detect` (yes) / `ipc_cmd -v always` (no) |
+| `motion_detection` | Solo actualiza variable; al final: `ipc_cmd -O on/off` (solo homever 11/12) |
+| `sensitivity` | `ipc_cmd -s low/medium/high` |
+| `ai_human_detection` | Solo variable; al final: `ipc_cmd -a on/off` |
+| `ai_vehicle_detection` | Solo variable; al final: `ipc_cmd -E on/off` (solo homever 11/12) |
+| `ai_animal_detection` | Solo variable; al final: `ipc_cmd -N on/off` (solo homever 11/12) |
+| `face_detection` | `ipc_cmd -c on/off` |
+| `motion_tracking` | `ipc_cmd -o on/off` |
+| `sound_detection` | `ipc_cmd -b on/off` |
+| `sound_sensitivity` | `ipc_cmd -n 30..90` |
+| `led` | `ipc_cmd -l on/off` |
+| `ir` | `ipc_cmd -i on/off` |
+| `rotate` | `ipc_cmd -r on/off` |
+| `cruise` | `ipc_cmd -C off` / `-C on` + `-C presets` / `-C on` + `-C 360` |
+
+Quirk del firmware: `motion_detection` y las `ai_*` NO se aplican dentro del
+bucle — solo actualizan variables del shell (semilla desde `camera.conf`) y
+el CGI lanza los `ipc_cmd` correspondientes al FINAL, dependiendo del
+`homever` (11/12 agrupan bajo `-O`; el resto solo `-a`). Consecuencia: una
+llamada con una sola key puede re-aplicar el estado AI persistido, no solo
+la key pedida.
+
+**No existen en el CGI** (y el NVR no puede controlarlos):
+- `baby_crying_detect`: solo vía MQTT (`BABY_CRYING_DETECT` → `ipc_cmd -B`,
+  `validate.c`). El CGI lo ignoraría en silencio (no-op con `error:false`).
+- `local_record`: no existe en este firmware (ni en el CGI ni en
+  `validate.c`); solo en el fork sonoff.
 
 ---
 
@@ -538,3 +599,4 @@ Contrato (ver cabecera de `routes/storage.js`):
 | 2026-08-23 | **502 en POST config push FTP (D23)**: el 502 «cámara no alcanzable» al guardar la config FTP no se reprodujo en pruebas (curl directo a la cámara 1,47 s y vía API 1,39 s, HTTP 200, body JSON de una línea y respuesta `{"error":"false"}` verificados correctos contra `set_configs.sh`/`validate.sh`). Causa más probable: timeout falso — el CGI hace un `sed -i` por clave (7 reescrituras de `system.conf` en la SD); en reposo ~1,5 s, pero con la SD ocupada (grabación o purge en curso) puede superar los 5 s genéricos. Fix: `SET_CONFIGS_TIMEOUT_MS = 15000` solo para ese endpoint + el handler ahora respeta `data.error === 'true'` (502 «la cámara rechazó la configuración» en vez de `success: true` silencioso). Frontend: el alcance del purge se reduce a 3 opciones de retención («De más de un día / 1 semana / 30 días», `from = época, to = ahora - N`); se eliminan «Última hora» y «Todo» (y el panel de confirmación por texto «BORRAR»). Estado final de la cámara: `FTP_UPLOAD=yes`, `in_sync=true`. |
 | 2026-08-23 | **Análisis completo de la SD (v0.3.6, y211ga) — ajustes fuera de la Web UI (D24)**: se documenta en `docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md` todo lo modificable en la SD: layout, flujo de arranque (`lower_half_init.sh` → `system.sh` → `startup.sh`), los 63 keys de `system.conf` + 15 de `camera.conf` + `mqttv4.conf`, tabla de puertos (RTSP 554 / HTTP 80 configurables; SSH 22, FTPD 21, WSDD 3702, mDNS 5353 hardcodeados), hooks de usuario (`/tmp/sd/debug.sh`, `startup.sh`, key `CRONTAB`, bind-mounts, `LD_PRELOAD`), desactivación de cloud (`DISABLE_CLOUD` → `cloudAPI_fake` + blacklist). **Hallazgo confirmado con fuente**: busybox 1.36.1 `ftpput` solo acepta puerto vía `-P` (default 21, sin `HOST:PORT`) y `nc` no soporta `host:port` → el push FTP de `ftppush.sh` va SIEMPRE a puerto 21 (4 sitios: `nc ... 21` ×2, `ftpput` sin `-P` ×2); por eso el NVR escucha en 21 por defecto (D25: default 21 en `ftp.js`; puerto alternativo = parchear `ftppush.sh`, ver `docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md` §5.2.1). |
 | 2026-08-23 | **Puerto FTP por defecto 21 (D25)**: el NVR escucha en el puerto 21 por defecto (`ftp.js`: `FTP_PORT = process.env.FTP_PORT || 21`; `.env.example` → `FTP_PORT=21`), el puerto que la cámara hardcodea en `ftppush.sh` → el push funciona out-of-the-box sin tocar la SD ni hacer forwards de puerto. Consecuencia: 21 es un puerto privilegiado — el API debe correr como root/admin (o con `CAP_NET_BIND_SERVICE` en Linux; en Docker el container ya es root); `startFtpServer` loguea un error claro con las opciones si el bind falla (`EACCES`/`EPERM`, y `EADDRINUSE`). Para un puerto alternativo: parchear `ftppush.sh` en la SD (4 sitios exactos documentados) + `FTP_PORT` en el NVR. |
+| 2026-08-28 | **`camera_settings.sh` verificado en el código (v0.3.6) — TODOs del adapter cerrados (ver §10.3)**: (1) La respuesta del CGI es SIEMPRE JSON `{"error":"false"}`/`{"error":"true"}` para TODAS las keys (no solo IR) — el código del adapter ya lo manejaba correctamente; se documenta y se cierra el TODO de `setViaCameraSettings`. (2) `baby_crying_detect` y `local_record` NO son keys de `camera_settings.sh`: el CGI ignora en silencio las keys desconocidas (no-op con `error:false`), así que se eliminan de `COMMAND_VALUES` (17→15 keys, = exactamente las del CGI) y `setCommand` las rechaza con 400 en vez de reportar éxito falso. `baby_crying_detect` solo existe vía MQTT (`ipc_cmd -B`) y el cliente MQTT del NVR solo se suscribe; `local_record` no existe en este firmware (solo fork sonoff). El frontend no usa el endpoint genérico `/command`, así que no hay impacto en la UI. |

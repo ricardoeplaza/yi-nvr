@@ -102,10 +102,10 @@ describe('CameraDetailPage', () => {
     return {
       getCameras: () => of({ success: true, count: 1, data: [camera] }),
       getCameraStatus: () => of({ success: true, data: status }),
-      setPower: () => of({ success: true, published: true, payload: {} }),
-      setLed: () => of({ success: true, published: true, payload: {} }),
-      setNightVision: () => of({ success: true, published: true, payload: {} }),
-      setRecMode: () => of({ success: true, published: true, payload: {} }),
+      setPower: () => of({ success: true, applied: true, key: 'switch_on', value: 'yes' }),
+      setLed: () => of({ success: true, applied: true, key: 'led', value: 'yes' }),
+      setNightVision: () => of({ success: true, applied: true, key: 'ir', value: 'yes' }),
+      setRecMode: () => of({ success: true, applied: true, key: 'save_video_on_motion', value: 'yes' }),
       setGroupPower: () => of({ success: true }),
       setHttpd: () => of({ success: true, httpd: 'yes', applied: 'next_boot' }),
       setPush: () =>

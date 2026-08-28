@@ -5,8 +5,9 @@ import { Camera, CameraStatus } from '../models/camera.model';
 
 export interface CommandResult {
   success: boolean;
-  published: boolean;
-  payload: any;
+  applied: boolean;
+  key: string;
+  value: string;
 }
 
 @Injectable({ providedIn: 'root' })

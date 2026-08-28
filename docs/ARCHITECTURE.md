@@ -824,7 +824,109 @@ subida colisionaba → dos clips distintos terminaban en el mismo nombre.
   (`true`/`false` en `.env.example`, default `true`). El temp se escribe con
   extensión `.mp4` (ffmpeg infiere el formato del sufijo) y queda oculto
   (dotfile); chokidar lo ignora (`ignored: /(^|[\/\\])\../`). Si falla, no
-   bloquea (el archivo original queda intacto).
+    bloquea (el archivo original queda intacto).
+
+### D29 (yi-api) — `GET /api/cameras` (rápido) + `GET /api/cameras/status` (completo) + caché TTL de los probes CGI de estado
+
+`buildCameraStatus()` hace 3 probes HTTP en paralelo a la cámara
+(`status.json`, `get_configs.sh?conf=camera`, `get_configs.sh?conf=system`;
+3 s de timeout cada uno). En ARM lento eso añade ~1–3 s por cámara a cada
+listado completo. Dos problemas: (1) la UI no necesita el estado real en
+cada render del listado rápido, y (2) sin caché, refrescos frecuentes
+martillean los CGI. Solución en dos partes: separar el listado rápido del
+completo, y cachear los probes.
+
+- **`GET /api/cameras`** (rápido, contrato clásico pre-a4ea000): SOLO
+  cameras.json + estadísticas de la BD + estado MQTT (id, name, host,
+  ecosystem, ftp_dir, capabilities, has_videos, video_count, last_video,
+  mqtt). SIN `buildCameraStatus` (ni `status`, ni `latest_video`). Responde
+  en <100 ms (solo SQLite). Lo usan dashboard, galería, detalle y storage
+  (solo necesitan los datos de BD).
+- **`GET /api/cameras/status`** (completo): como `GET /cameras` + `status`
+  (yi-hack, el mismo objeto de `GET /cameras/:id/status`) + `latest_video`
+  por cámara. La pantalla de listado de cámaras lo usa.
+- **Caché de probes por cámara** en `camera/adapters/yi-hack.js` (mismo
+  patrón que `dirsCache` del mismo adapter: `Map` + TTL, sin dependencias):
+  - TTL `CAMERA_STATUS_CACHE_TTL_MS` (env, default 30000; `0` desactiva).
+  - **Single-flight**: la caché guarda la `Promise` en vuelo (no el valor
+    resuelto), así N peticiones concurrentes comparten un solo sondeo.
+  - Clave: `cam.id`. Al expirar (o invalidarse), la siguiente llamada
+    sondea de nuevo.
+  - **Única puerta de lectura**: `adapter.getProbes(cam)` es por donde pasan
+    TODAS las lecturas de esos 3 CGI (`buildCameraStatus`,
+    `adapter.getStatus` para `free_sd`, `adapter.getSystemConfig` para la
+    conf system). No hay `fetchCameraJson` de lectura de esos CGI fuera de
+    la caché.
+- **Invalidación** (`adapter.invalidateProbes(cam)`) tras toda operación que
+  cambia el estado de la cámara. La hacen los propios métodos mutantes del
+  adapter EN ÉXITO (las rutas no invalidan nada):
+  - **Escritura de system.conf — automática**: `writeSystemConfig()` (en
+    `camera/adapters/yi-hack.js`) es el ÚNICO punto de escritura de
+    system.conf del API (`set_configs.sh?conf=system`). Invalida la caché
+    SIEMPRE que el CGI acepta la escritura (y solo entonces: si el CGI
+    rechaza —`error: "true"` → 502 `CONFIG_REJECTED`—, la conf no cambió y
+    la caché sigue siendo válida). Por ella pasan `POST /cameras/:id/httpd`
+    y `POST /cameras/:id/storage/ftp`.
+  - **Controles inmediatos — automática**: `setViaCameraSettings()`
+    (`camera_settings.sh`: `power`, `led`, `night-vision`, `rec-mode`,
+    `command` (whitelist) y `group/power` (todas las del grupo)).
+  - **`POST /cameras/:id/reboot`** (`adapter.reboot`; el reboot tumba el
+    estado).
+  - **Borrados de SD** (`adapter.deleteEventDir` / `adapter.deleteEventFile`;
+    DELETE `/storage/files`, DELETE `/storage/dirs`, POST `/storage/purge`):
+    liberan espacio y cambian `free_sd` de `status.json`, que la caché sirve
+    a `GET /cameras/:id/storage` y a `buildCameraStatus`.
+  - NO se invalida en `reload` (cambia el registro, no el estado de la
+    cámara).
+
+### D30 (yi-api) — Acceso multi-ecosistema a cámaras: Adapter/Strategy por ecosistema + factory
+
+D19 introdujo el campo `ecosystem` y el contrato de estado unificado, pero la
+lógica de dispositivo (probes, caché, escritura CGI, sanitización, timeouts)
+quedaba repartida entre las rutas (`routes/storage.js`, `routes/camera-status.js`)
+y `camera-status-service.js`, y el control remoto de las cámaras yi-hack iba
+por MQTT (publicar en `cmnd/camera/<cmd>`, `mqtt/commands.js`). Con un solo
+ecosistema funcional eso funcionaba, pero no dejaba costura limpia para
+añadir otro (p. ej. Tuya): no había un sitio único donde decir "qué sabe
+hacer este ecosistema" ni dónde poner su lógica de acceso. Solución: patrón
+Adapter/Strategy por ecosistema + factory.
+
+- **Factory** (`src/camera/index.js`): `getCameraAdapter(cam)` devuelve el
+  adapter del ecosistema de la cámara o `null` (NO hay NoopAdapter: método
+  ausente = no soportado; la superficie de cada ecosistema la documenta su
+  `capabilities`).
+- **`resolveCameraFor(req, res, method, unsupportedMessage?)`**: resuelve
+  `req.params.id` + adapter y es el ÚNICO punto que responde 404
+  (`cámara no encontrada`) / 409 (ecosistema sin adapter o método no
+  soportado) / 400 (`la cámara no tiene host configurado`). La ruta hace
+  `const r = resolveCameraFor(...); if (!r) return;` y luego
+  `r.adapter.<method>(r.cam, ...)`. El mensaje 409 lo pasa cada ruta (cada
+  dominio tiene su literal; el frontend lo aserta en tests).
+- **Adapter yi-hack** (`src/camera/adapters/yi-hack.js`): la ÚNICA API
+  pública de HTTP hacia cámaras yi-hack. Posee la caché de probes (D29), los
+  3 probes en paralelo, la whitelist `COMMAND_VALUES` (17 keys), la
+  sanitización 14-chars de la SD y los timeouts por operación (probes/reboot
+  3 s, `camera_settings.sh` 5 s, `set_configs.sh?conf=system` 15 s,
+  events 5/30 s). Los métodos mutantes invalidan la caché de probes en éxito
+  (D29).
+- **Control migrado de MQTT a CGI**: los 6 endpoints de control de
+  `routes/cameras.js` (`power`, `led`, `night-vision`, `rec-mode`, `command`
+  y `group/power`) van por `camera_settings.sh` (aplicación INMEDIATA vía
+  `ipc_cmd`, `docs/CAMERA-CGI-REFERENCE.md` §10.2) en vez de publicar en
+  MQTT. Consecuencia: `mqtt/commands.js` eliminado, `mqtt/client.js` ya no
+  tiene `publish` ni tema de comandos — MQTT queda reducido a eventos
+  unidireccionales cámara → NVR (birth/will, feedback `stat`, motion,
+  clips). El control por CGI es además más fiable: respuesta síncrona del
+  CGI (éxito/rechazo) en vez de feedback MQTT asíncrono.
+- **`camera-status-service.js` reducido a composición**: `buildCameraStatus`,
+  `buildSd`, `getNvrData`, `composeState`, `buildConfigFromMqtt`. Las
+  exportaciones legacy (`getProbes` / `fetchProbes` / `fetchCameraJson` /
+  `setCameraConfig` / `invalidateCameraStatus`) se conservan delegando en el
+  adapter (misma firma), pero ninguna ruta las llama.
+- **Plan de extensión**: un segundo ecosistema (p. ej. Tuya) = añadir
+  `src/camera/adapters/<eco>.js` + un caso en la factory. El "contrato"
+  entre adapters (qué métodos existen y su semántica) se documentará cuando
+  aparezca el segundo adapter, no antes (YAGNI: hoy solo hay uno).
 
 ## Notas durante el desarrollo (live view)
 
