@@ -32,7 +32,7 @@
  *  - id, host, ecosystem ("yi-hack" | "generic")
  *  - capabilities: qué secciones puede mostrar el frontend:
  *      live_status → state/http/mqtt/status/camera_config/system_config
- *      controls    → endpoints de control (reboot, httpd)
+ *      controls    → endpoints de control (reboot, httpd, sd-recording)
  *      sd          → sección SD
  *      wifi        → WiFi (wlan_essid/wlan_strength de status.json)
  *      system      → fw/uptime/memoria (status.json + system_config)
@@ -72,6 +72,11 @@
  *    Persiste en etc/system.conf; el firmware solo lee HTTPD al arrancar
  *    (system.sh), así que el cambio se aplica en el siguiente reboot.
  *    SOLO yi-hack (generic → 409).
+ *  - POST /cameras/:id/sd-recording - REC_WITHOUT_CLOUD yes/no
+ *    (set_configs.sh?conf=system): grabación de videos en la SD on/off.
+ *    Persiste en etc/system.conf; el firmware solo lo lee al arrancar, así
+ *    que el cambio se aplica en el siguiente boot (no reinicia la cámara).
+ *    SOLO yi-hack (generic → 409).
  *  - POST /cameras/:id/push   - Activa/desactiva el push de movimiento de
  *    esta cámara (estado del NVR, tabla camera_settings, no de la cámara).
  *    AMBOS ecosistemas: es un ajuste del NVR, no un control del dispositivo.
@@ -85,6 +90,7 @@
  */
 
 const express = require('express');
+const debug = require('debug');
 const registry = require('../camera-registry');
 const { setCameraPushEnabled } = require('../database');
 const { resolveCameraFor } = require('../camera');
@@ -118,6 +124,24 @@ function resolveControl(req, res, method) {
         method,
         cam ? unsupportedControlsMessage(cam) : undefined
     );
+}
+
+/**
+ * Mapea un error del adapter al HTTP correspondiente: INVALID → 400 con el
+ * mensaje de la whitelist; CONFIG_REJECTED → 502 "la cámara rechazó la
+ * configuración"; resto (fetch crudo) → 502 "cámara no alcanzable".
+ * @param {Object} res - Response de Express
+ * @param {Error} error
+ */
+function adapterError(res, error) {
+    debug('[API] Error del adapter:', error);
+    if (error.code === 'INVALID') {
+        res.status(400).json({ success: false, error: error.message });
+    } else if (error.code === 'CONFIG_REJECTED') {
+        res.status(502).json({ success: false, error: error.message });
+    } else {
+        res.status(502).json({ success: false, error: 'cámara no alcanzable' });
+    }
 }
 
 /**
@@ -196,6 +220,35 @@ router.post('/cameras/:id/httpd', async (req, res) => {
     res.json({
         success: true,
         httpd: enabled ? 'yes' : 'no',
+        applied: 'next_boot'
+    });
+});
+
+/**
+ * POST /api/cameras/:id/sd-recording
+ *
+ * Cuerpo: {"enabled": true|false} — activa/desactiva la grabación de videos
+ * en la tarjeta SD (set_configs.sh?conf=system, REC_WITHOUT_CLOUD yes/no).
+ * Persiste en etc/system.conf, pero el firmware solo lo lee al arrancar, así
+ * que el cambio se aplica en el siguiente boot (no reinicia la cámara).
+ */
+router.post('/cameras/:id/sd-recording', async (req, res) => {
+    const { enabled } = req.body || {};
+    if (typeof enabled !== 'boolean') {
+        return res.status(400).json({ success: false, error: 'enabled debe ser booleano' });
+    }
+    const r = resolveControl(req, res, 'setRecWithoutCloud');
+    if (!r) return;
+    try {
+        // El adapter invalida la caché de probes en éxito (único punto de
+        // escritura de system.conf; ver cabecera del adapter).
+        await r.adapter.setRecWithoutCloud(r.cam, enabled);
+    } catch (e) {
+        return adapterError(res, e);
+    }
+    res.json({
+        success: true,
+        rec_without_cloud: enabled ? 'yes' : 'no',
         applied: 'next_boot'
     });
 });

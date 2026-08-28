@@ -91,36 +91,33 @@ const STATUS_POLL_MS = 30000;
                   </button>
                 }
                 @if (camera()!.capabilities.rec_mode) {
-                  <button class="toggle-btn" [class.active]="recMode() === 'motion'" (click)="toggleRecMode()">
+                  <button class="toggle-btn active" (click)="toggleRecMode()">
                     <span class="toggle-label">Grabación</span>
-                    <span class="toggle-state">{{ recMode() === 'motion' ? 'Movimiento' : 'Off' }}</span>
+                    <span class="toggle-state">{{ recMode() === 'motion' ? 'Movimiento' : 'Continua' }}</span>
                   </button>
                 }
               }
               @if (status()?.capabilities.push) {
                 <button class="toggle-btn" [class.active]="pushEnabled()" (click)="togglePush()">
-                  <span class="toggle-label">Push de movimiento</span>
+                  <span class="toggle-label">Notificación de movimiento</span>
                   <span class="toggle-state">{{ pushEnabled() ? 'ON' : 'OFF' }}</span>
                 </button>
               }
-              @if (status()?.capabilities.controls && status()?.system_config) {
-                <button class="toggle-btn" [class.active]="httpdOn()" (click)="toggleHttpd()">
-                  <span class="toggle-label">Servidor HTTP *</span>
-                  <span class="toggle-state">{{ httpdOn() ? 'ON' : 'OFF' }}</span>
-                </button>
-              }
-              @if (status()?.capabilities.controls) {
-                <button class="danger-btn" [disabled]="status()?.http === false" (click)="rebootCamera()">
-                  Reiniciar cámara
-                </button>
-              }
+               @if (status()?.capabilities.controls) {
+                 <button class="toggle-btn" [class.active]="sdRecording()" (click)="toggleSdRecording()">
+                   <span class="toggle-label">Guardado en SD*</span>
+                   <span class="toggle-state">{{ sdRecording() ? 'ON' : 'OFF' }}</span>
+                 </button>
+                 <button class="danger-btn" [disabled]="status()?.http === false" (click)="rebootCamera()">
+                   Reiniciar cámara
+                 </button>
+               }
             </div>
             @if (status()?.capabilities.controls) {
               <p class="section-note">
-                * Requiere reinicio de la cámara para aplicarse; los demás controles son inmediatos.
-                Desactivar «Servidor HTTP» impide el estado en vivo y los controles HTTP (el MQTT sigue funcionando).
+                «Guardado en SD»* requiere reinicio de la cámara para aplicarse; los demás controles son inmediatos.
                 @if (status()?.http === false) {
-                  «Reiniciar cámara» y «Servidor HTTP» requieren el httpd de la cámara (ahora mismo no disponible).
+                  «Reiniciar cámara» requiere el httpd de la cámara (ahora mismo no disponible).
                 }
               </p>
             }
@@ -175,7 +172,7 @@ export class CameraDetailPage implements OnInit, OnDestroy {
   nightVision = signal(false);
   recMode = signal<'motion' | 'off'>('motion');
   pushEnabled = signal(true);
-  httpdOn = signal(true);
+  sdRecording = signal(false);
   // Error de la última acción (p. ej. 409 UNSUPPORTED_ECOSYSTEM si el estado
   // cacheado está desactualizado). Se muestra sin romper la página.
   actionError = signal<string | null>(null);
@@ -222,7 +219,7 @@ export class CameraDetailPage implements OnInit, OnDestroy {
           this.recMode.set(s.camera_config['SAVE_VIDEO_ON_MOTION'] === 'yes' ? 'motion' : 'off');
         }
         if (s.system_config) {
-          this.httpdOn.set(s.system_config['HTTPD'] === 'yes');
+          this.sdRecording.set(s.system_config['REC_WITHOUT_CLOUD'] === 'yes');
         }
         this.pushEnabled.set(s.push_enabled);
       },
@@ -347,13 +344,13 @@ export class CameraDetailPage implements OnInit, OnDestroy {
     });
   }
 
-  toggleHttpd() {
-    const newVal = !this.httpdOn();
-    this.httpdOn.set(newVal);
-    this.cameraService.setHttpd(this.cameraId, newVal).subscribe({
+  toggleSdRecording() {
+    const newVal = !this.sdRecording();
+    this.sdRecording.set(newVal);
+    this.cameraService.setSdRecording(this.cameraId, newVal).subscribe({
       next: () => this.actionError.set(null),
       error: (err) => {
-        this.httpdOn.set(!newVal);
+        this.sdRecording.set(!newVal);
         this.actionError.set(this.extractError(err));
       }
     });

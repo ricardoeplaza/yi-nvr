@@ -41,11 +41,11 @@ export interface Camera {
   video_count: number;
   last_video: string | null;
   mqtt?: CameraMqttState | null;
-  // Campos aditivos de GET /cameras (enriquecimiento N+1 → 1):
-  // status: mismo objeto que GET /cameras/:id/status (null en generic);
-  // latest_video: último clip de la cámara (null si no tiene clips).
-  status: CameraStatus | null;
-  latest_video: Video | null;
+  // Campos SOLO de GET /cameras/status (el listado rápido GET /cameras no
+  // los trae): status: mismo objeto que GET /cameras/:id/status (null en
+  // generic); latest_video: último clip de la cámara (null si no tiene).
+  status?: CameraStatus | null;
+  latest_video?: Video | null;
 }
 
 export interface CameraSd {

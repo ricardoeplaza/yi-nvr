@@ -253,6 +253,7 @@ NO maneja; `local_record` NO existe en este firmware (solo en el fork sonoff).
 | `/cameras/:id/status` | GET | Estado real (proxy HTTP a `status.json` + `get_configs.sh`): estado compuesto `on`/`off`/`unreachable`, SD calculada, últimos eventos MQTT, estado push |
 | `/cameras/:id/reboot` | POST | Reinicia la cámara (CGI `reboot.sh`) |
 | `/cameras/:id/httpd` | POST | `HTTPD` yes/no (persiste; **se aplica en el siguiente boot**, el firmware solo lee `HTTPD` al arrancar) |
+| `/cameras/:id/sd-recording` | POST | `REC_WITHOUT_CLOUD` yes/no (grabación de videos en la SD on/off; persiste; **se aplica en el siguiente boot**, el firmware solo lee `system.conf` al arrancar) |
 | `/cameras/:id/push` | POST | Toggle de push de movimiento de la cámara (estado del NVR, tabla `camera_settings`) |
 
 ---

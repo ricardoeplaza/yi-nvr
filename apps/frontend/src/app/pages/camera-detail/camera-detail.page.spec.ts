@@ -107,9 +107,9 @@ describe('CameraDetailPage', () => {
       setNightVision: () => of({ success: true, applied: true, key: 'ir', value: 'yes' }),
       setRecMode: () => of({ success: true, applied: true, key: 'save_video_on_motion', value: 'yes' }),
       setGroupPower: () => of({ success: true }),
-      setHttpd: () => of({ success: true, httpd: 'yes', applied: 'next_boot' }),
       setPush: () =>
         pushError ? throwError(() => pushError) : of({ success: true, push_enabled: false }),
+      setSdRecording: () => of({ success: true, rec_without_cloud: 'yes', applied: 'next_boot' }),
       rebootCamera: () => of({ success: true, rebooted: true }),
     };
   }
@@ -154,7 +154,20 @@ describe('CameraDetailPage', () => {
       expect(host.textContent).toContain('Firmware');
       expect(host.textContent).toContain('WiFi');
       expect(host.textContent).toContain('Serie');
-      expect(host.textContent).toContain('Push de movimiento');
+      expect(host.textContent).toContain('Notificación de movimiento');
+      fixture.destroy();
+    });
+
+    it('muestra el toggle "Guardado en SD" con el estado de system_config', async () => {
+      const st = makeStatus('yi-hack');
+      st.system_config = { HTTPD: 'yes', REC_WITHOUT_CLOUD: 'yes' };
+      const fixture = await createPage(makeCamera('yi-hack'), st);
+      const host = fixture.nativeElement;
+      const sdBtn = Array.from(host.querySelectorAll('.toggle-btn') as NodeListOf<Element>).find(
+        (b) => b.textContent.includes('Guardado en SD'),
+      );
+      expect(sdBtn).toBeTruthy();
+      expect(sdBtn?.classList.contains('active')).toBe(true);
       fixture.destroy();
     });
   });
@@ -180,7 +193,7 @@ describe('CameraDetailPage', () => {
       expect(host.textContent).toContain('12');
       expect(host.textContent).toContain('Último video');
       expect(host.textContent).toContain('Último evento');
-      expect(host.textContent).toContain('Push de movimiento');
+      expect(host.textContent).toContain('Notificación de movimiento');
       fixture.destroy();
     });
   });

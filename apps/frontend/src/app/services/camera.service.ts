@@ -18,6 +18,10 @@ export class CameraService {
     return this.http.get<{ success: boolean; count: number; data: Camera[] }>('/api/cameras');
   }
 
+  getCamerasStatus(): Observable<{ success: boolean; count: number; data: Camera[] }> {
+    return this.http.get<{ success: boolean; count: number; data: Camera[] }>('/api/cameras/status');
+  }
+
   setPower(cameraId: string, enabled: boolean): Observable<CommandResult> {
     return this.http.post<CommandResult>(`/api/cameras/${cameraId}/power`, { enabled });
   }
@@ -49,11 +53,11 @@ export class CameraService {
     return this.http.post<{ success: boolean; rebooted: boolean }>(`/api/cameras/${cameraId}/reboot`, {});
   }
 
-  setHttpd(cameraId: string, enabled: boolean): Observable<{ success: boolean; httpd: string; applied: string }> {
-    return this.http.post<{ success: boolean; httpd: string; applied: string }>(`/api/cameras/${cameraId}/httpd`, { enabled });
-  }
-
   setPush(cameraId: string, enabled: boolean): Observable<{ success: boolean; push_enabled: boolean }> {
     return this.http.post<{ success: boolean; push_enabled: boolean }>(`/api/cameras/${cameraId}/push`, { enabled });
+  }
+
+  setSdRecording(cameraId: string, enabled: boolean): Observable<{ success: boolean; rec_without_cloud: string; applied: string }> {
+    return this.http.post<{ success: boolean; rec_without_cloud: string; applied: string }>(`/api/cameras/${cameraId}/sd-recording`, { enabled });
   }
 }

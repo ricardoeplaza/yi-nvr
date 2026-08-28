@@ -4,6 +4,7 @@ import { EmptyState } from '../../shared/empty-state/empty-state';
 import { AppHeader } from '../../shared/app-header/app-header';
 import { CameraService } from '../../services/camera.service';
 import { PowerService } from '../../services/power.service';
+import { ToastService } from '../../shared/toast/toast.service';
 import { Camera } from '../../models/camera.model';
 
 @Component({
@@ -16,6 +17,7 @@ export class Cameras implements OnInit, OnDestroy {
   private cameraService = inject(CameraService);
   // Público: el template consulta isOn() por cámara.
   readonly powerService = inject(PowerService);
+  private toast = inject(ToastService);
 
   cameras = signal<Camera[]>([]);
   loading = signal(true);
@@ -23,7 +25,7 @@ export class Cameras implements OnInit, OnDestroy {
   private destroyed = false;
 
   ngOnInit() {
-    this.cameraService.getCameras().subscribe({
+    this.cameraService.getCamerasStatus().subscribe({
       next: (res) => {
         if (this.destroyed) return;
         this.cameras.set(res.data);
@@ -50,6 +52,31 @@ export class Cameras implements OnInit, OnDestroy {
 
   onTogglePower(cam: Camera) {
     this.powerService.toggle(cam.id);
+  }
+
+  onToggleRecMode(cam: Camera) {
+    const current: 'motion' | 'off' =
+      cam.status?.camera_config?.['SAVE_VIDEO_ON_MOTION'] === 'yes' ? 'motion' : 'off';
+    const next: 'motion' | 'off' = current === 'motion' ? 'off' : 'motion';
+    const prev = this.cameras();
+    this.cameras.update((cams) =>
+      cams.map((c) => {
+        if (c.id !== cam.id) return c;
+        const status = c.status ? { ...c.status } : c.status;
+        if (!status) return { ...c };
+        const camera_config = status.camera_config ? { ...status.camera_config } : {};
+        camera_config['SAVE_VIDEO_ON_MOTION'] = next === 'motion' ? 'yes' : 'no';
+        return { ...c, status: { ...status, camera_config } };
+      }),
+    );
+    this.cameraService.setRecMode(cam.id, next).subscribe({
+      next: () =>
+        this.toast.show(next === 'motion' ? 'Grabación por movimiento' : 'Grabación continua', 'success'),
+      error: () => {
+        this.cameras.set(prev);
+        this.toast.show('Error al cambiar la grabación', 'error');
+      },
+    });
   }
 
   // Fecha del clip cuyo thumbnail se muestra. null (sin clips) → la card

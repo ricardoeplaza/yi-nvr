@@ -175,8 +175,26 @@
   }
 }
 
-.power-toggle {
+.card-controls {
   margin-left: auto;
+  display: flex;
+  // 2 columnas (default): tarjeta estrecha → apilados (Encendido arriba,
+  // Grabación debajo), alineados al borde derecho.
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+
+  // 1 columna (viewport <= 453px): tarjeta ancha → pills en línea.
+  // row-reverse: Encendido a la derecha (cerca del pulgar), Grabación a la izq.
+  @media (max-width: 453px) {
+    flex-direction: row-reverse;
+    align-items: center;
+  }
+}
+
+.power-toggle,
+.rec-toggle {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -199,19 +217,26 @@
   &:active {
     transform: scale(0.94);
   }
+}
 
-  .power-state {
-    color: var(--text-faint);
-    font-weight: 700;
-  }
+.power-toggle .power-state {
+  color: var(--text-faint);
+  font-weight: 700;
+}
 
-  &.active {
-    border-color: var(--accent-blue);
-    color: var(--text);
-    background: #f0f5ff;
+.rec-toggle .rec-state {
+  color: var(--text-faint);
+  font-weight: 700;
+}
 
-    .power-state {
-      color: var(--accent-blue);
-    }
+.power-toggle.active,
+.rec-toggle.active {
+  border-color: var(--accent-blue);
+  color: var(--text);
+  background: #f0f5ff;
+
+  .power-state,
+  .rec-state {
+    color: var(--accent-blue);
   }
 }

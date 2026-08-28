@@ -42,17 +42,29 @@ import { FormatDatePipe } from '../format-date.pipe';
             } @else {
               <span class="camera-last">Sin grabaciones</span>
             }
-            @if (camera().capabilities.power) {
-              <button
-                class="power-toggle"
-                [class.active]="powerOn() === true"
-                type="button"
-                (click)="$event.stopPropagation(); togglePower.emit(camera())"
-              >
-                <span>Encendido</span>
-                <span class="power-state">{{ powerOn() ? 'ON' : 'OFF' }}</span>
-              </button>
-            }
+            <div class="card-controls">
+              @if (camera().capabilities.power) {
+                <button
+                  class="power-toggle"
+                  [class.active]="powerOn() === true"
+                  type="button"
+                  (click)="$event.stopPropagation(); togglePower.emit(camera())"
+                >
+                  <span>Encendido</span>
+                  <span class="power-state">{{ powerOn() ? 'ON' : 'OFF' }}</span>
+                </button>
+              }
+              @if (camera().capabilities.rec_mode) {
+                <button
+                  class="rec-toggle active"
+                  type="button"
+                  (click)="$event.stopPropagation(); toggleRecMode.emit(camera())"
+                >
+                  <span>Grabación</span>
+                  <span class="rec-state">{{ recMode() === 'motion' ? 'Movimiento' : 'Continua' }}</span>
+                </button>
+              }
+            </div>
           </div>
         }
       </div>
@@ -70,9 +82,18 @@ export class CameraCard {
 
   /* ---------- outputs ---------- */
   readonly togglePower = output<Camera>();
+  readonly toggleRecMode = output<Camera>();
 
   /* ---------- derivados ---------- */
   readonly isYiHack = computed(() => this.camera().ecosystem === 'yi-hack');
+
+  // 'yes' → grabación por movimiento; 'no' → continua. Sin status/config
+  // (p. ej. generic o status aún no cargado) → 'motion', como en camera-detail.
+  readonly recMode = computed<'motion' | 'off'>(() => {
+    const cfg = this.status()?.camera_config;
+    if (!cfg) return 'motion';
+    return cfg['SAVE_VIDEO_ON_MOTION'] === 'yes' ? 'motion' : 'off';
+  });
 
   // La imagen se desatura cuando la cámara está apagada, inaccesible o su
   // httpd no responde (puede estar viva por MQTT pero sin CGIs).

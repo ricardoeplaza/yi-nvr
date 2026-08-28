@@ -107,6 +107,7 @@ const capabilities = Object.freeze({
     setSaveVideoOnMotion: true,
     setCommand: true,
     setHttpd: true,
+    setRecWithoutCloud: true,
     setFtpPushConfig: true,
     setCameraConfig: true,
     listEventDirs: true,
@@ -413,6 +414,18 @@ function setHttpd(cam, value) {
 }
 
 /**
+ * Activa/desactiva la grabación de videos en la tarjeta SD (REC_WITHOUT_CLOUD
+ * yes/no en system.conf: yes → grabación local en SD, no → solo stream RTSP).
+ * El firmware solo lee system.conf al arrancar, así que el cambio se aplica
+ * en el siguiente boot (no reinicia la cámara).
+ * @param {Object} cam
+ * @param {boolean|string} value - true/false, "yes"/"no" u "on"/"off"
+ */
+function setRecWithoutCloud(cam, value) {
+    return writeSystemConfig(cam, { REC_WITHOUT_CLOUD: toYesNo(value) });
+}
+
+/**
  * Escribe la config de push FTP completa (switches + campos fijos derivados
  * por el NVR) en system.conf (aplica en el siguiente boot; ftppush la lee en
  * vivo cada 45 s si el servicio ya corre).
@@ -632,6 +645,7 @@ module.exports = {
     setSaveVideoOnMotion,
     setCommand,
     setHttpd,
+    setRecWithoutCloud,
     setFtpPushConfig,
     setCameraConfig,
     listEventDirs,

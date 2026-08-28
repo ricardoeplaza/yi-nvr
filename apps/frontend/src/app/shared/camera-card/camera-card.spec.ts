@@ -63,6 +63,7 @@ function makeStatus(extra: Partial<CameraStatus> = {}): CameraStatus {
       [thumbnailUrl]="thumbnailUrl()"
       [lastEventAt]="lastEventAt()"
       (togglePower)="onToggle($event)"
+      (toggleRecMode)="onToggleRec($event)"
     />
   `,
 })
@@ -73,6 +74,7 @@ class HostComponent {
   thumbnailUrl = signal<string | null>(null);
   lastEventAt = signal<string | null>(null);
   onToggle = vi.fn();
+  onToggleRec = vi.fn();
 }
 
 describe('CameraCard', () => {
@@ -157,6 +159,57 @@ describe('CameraCard', () => {
     const host = fixture.componentInstance;
     (fixture.nativeElement.querySelector('.power-toggle') as HTMLElement).click();
     expect(host.onToggle).toHaveBeenCalledWith(host.camera());
+    fixture.destroy();
+  });
+
+  it('yi-hack con capabilities.rec_mode muestra el pill de Grabación', async () => {
+    const fixture = await createHost();
+    const btn = fixture.nativeElement.querySelector('.rec-toggle') as HTMLElement;
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toContain('Grabación');
+    expect(btn.classList.contains('active')).toBe(true);
+    fixture.destroy();
+  });
+
+  it("SAVE_VIDEO_ON_MOTION 'yes' muestra 'Movimiento'; 'no' muestra 'Continua'", async () => {
+    const fixture = await createHost();
+    const host = fixture.componentInstance;
+    host.status.set(makeStatus({ camera_config: { SAVE_VIDEO_ON_MOTION: 'yes' } }));
+    fixture.detectChanges();
+    let btn = fixture.nativeElement.querySelector('.rec-toggle') as HTMLElement;
+    expect(btn.textContent).toContain('Movimiento');
+
+    host.status.set(makeStatus({ camera_config: { SAVE_VIDEO_ON_MOTION: 'no' } }));
+    fixture.detectChanges();
+    btn = fixture.nativeElement.querySelector('.rec-toggle') as HTMLElement;
+    expect(btn.textContent).toContain('Continua');
+    fixture.destroy();
+  });
+
+  it('click en el pill de grabación emite toggleRecMode con la cámara', async () => {
+    const fixture = await createHost();
+    const host = fixture.componentInstance;
+    (fixture.nativeElement.querySelector('.rec-toggle') as HTMLElement).click();
+    expect(host.onToggleRec).toHaveBeenCalledWith(host.camera());
+    expect(host.onToggle).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+
+  it('sin capabilities.rec_mode no muestra el pill de grabación', async () => {
+    const fixture = await createHost();
+    const host = fixture.componentInstance;
+    host.camera.set(makeCamera({ capabilities: { led: false, ircut: false, rec_mode: false, power: false } }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.rec-toggle')).toBeNull();
+    fixture.destroy();
+  });
+
+  it('generic no muestra el pill de grabación', async () => {
+    const fixture = await createHost();
+    const host = fixture.componentInstance;
+    host.camera.set(makeCamera({ ecosystem: 'generic' }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.rec-toggle')).toBeNull();
     fixture.destroy();
   });
 

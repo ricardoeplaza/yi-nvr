@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
+import { ToastService } from '../../shared/toast/toast.service';
 
 import { Cameras } from './cameras';
 import { CameraService } from '../../services/camera.service';
@@ -79,6 +80,7 @@ describe('Cameras', () => {
   let getCamerasSpy: ReturnType<typeof vi.fn>;
   let powerSeedSpy: ReturnType<typeof vi.fn>;
   let powerToggleSpy: ReturnType<typeof vi.fn>;
+  let setRecModeSpy: ReturnType<typeof vi.fn>;
 
   async function createPage(overrides?: { cameras?: Camera[]; camerasError?: boolean }) {
     const cameras = overrides?.cameras ?? [
@@ -100,11 +102,15 @@ describe('Cameras', () => {
     );
     powerSeedSpy = vi.fn();
     powerToggleSpy = vi.fn();
+    setRecModeSpy = vi.fn(() => of({ success: true, applied: true, key: 'SAVE_VIDEO_ON_MOTION', value: 'no' }));
     await TestBed.configureTestingModule({
       imports: [Cameras],
       providers: [
         provideRouter([]),
-        { provide: CameraService, useValue: { getCameras: getCamerasSpy } },
+        {
+          provide: CameraService,
+          useValue: { getCamerasStatus: getCamerasSpy, setRecMode: setRecModeSpy },
+        },
         {
           provide: PowerService,
           useValue: { isOn: () => null, seed: powerSeedSpy, toggle: powerToggleSpy },
@@ -189,6 +195,18 @@ describe('Cameras', () => {
     const btn = fixture.nativeElement.querySelector('.power-toggle') as HTMLButtonElement;
     btn.dispatchEvent(new MouseEvent('click'));
     expect(powerToggleSpy).toHaveBeenCalledWith('cam1');
+    fixture.destroy();
+  });
+
+  it('el click en el pill de grabación llama a setRecMode y actualiza el signal de forma optimista', async () => {
+    const fixture = await createPage();
+    const c = fixture.componentInstance;
+    expect(c.cameras()[0].status?.camera_config?.['SAVE_VIDEO_ON_MOTION']).toBe('yes');
+    const btn = fixture.nativeElement.querySelector('.rec-toggle') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click'));
+    expect(setRecModeSpy).toHaveBeenCalledWith('cam1', 'off');
+    expect(c.cameras()[0].status?.camera_config?.['SAVE_VIDEO_ON_MOTION']).toBe('no');
+    // Inmutable: el objeto anterior no se muta.
     fixture.destroy();
   });
 

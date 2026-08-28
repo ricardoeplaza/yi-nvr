@@ -17,11 +17,12 @@
         @for (cam of cameras(); track cam.id) {
           <yi-camera-card
             [camera]="cam"
-            [status]="cam.status"
+            [status]="cam.status ?? null"
             [powerOn]="powerService.isOn(cam.id)"
             [thumbnailUrl]="cam.latest_video?.thumbnail_url ?? null"
             [lastEventAt]="lastClipAt(cam)"
             (togglePower)="onTogglePower($event)"
+            (toggleRecMode)="onToggleRecMode($event)"
           />
         }
       </div>
