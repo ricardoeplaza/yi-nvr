@@ -25,20 +25,22 @@ function pad2(n: number): string {
           <p>Configura cámaras en cameras.json</p>
         </div>
       } @else {
-        <yi-player
-          [video]="selectedVideo()"
-          [title]="playerTitle()"
-          [isFavorite]="selectedVideo()?.favorite ?? false"
-          (nextVideo)="onVideoEnded($event)"
-          (favorite)="onFavoriteToggle($event)"
-        ></yi-player>
+        <div class="home-main">
+          <yi-player
+            [video]="selectedVideo()"
+            [title]="playerTitle()"
+            [isFavorite]="selectedVideo()?.favorite ?? false"
+            (nextVideo)="onVideoEnded($event)"
+            (favorite)="onFavoriteToggle($event)"
+          ></yi-player>
 
-        <yi-timeline
-          [videos]="videos()"
-          [selectedId]="selectedVideo()?.id ?? null"
-          (videoSelect)="selectVideo($event)"
-          (rangeChange)="timelineRange.set($event)"
-        ></yi-timeline>
+          <yi-timeline
+            [videos]="videos()"
+            [selectedId]="selectedVideo()?.id ?? null"
+            (videoSelect)="selectVideo($event)"
+            (rangeChange)="timelineRange.set($event)"
+          ></yi-timeline>
+        </div>
 
         <div class="events">
           @if (videos().length === 0) {

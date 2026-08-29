@@ -70,6 +70,18 @@
   }
 }
 
+.files-top {
+  padding-bottom: 0;
+}
+
+.sd-panel {
+  padding: 0 14px;
+}
+
+.files-list {
+  padding: 0 14px 4px;
+}
+
 .muted {
   font-size: 12px;
   color: var(--text-faint);
@@ -446,6 +458,38 @@
     &.partial {
       border-color: var(--amber);
       background: #fffbeb;
+    }
+  }
+}
+
+@media (min-width: 1024px) {
+  .storage-body {
+    display: grid;
+    grid-template-columns: minmax(0, 38fr) minmax(0, 62fr);
+    align-items: start;
+  }
+
+  .sd-panel {
+    margin-top: 10px;
+  }
+
+  .files-list {
+    max-height: calc(100vh - var(--tab-bar-h) - 200px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-faint) transparent;
+
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: var(--text-faint);
+      border-radius: 4px;
     }
   }
 }

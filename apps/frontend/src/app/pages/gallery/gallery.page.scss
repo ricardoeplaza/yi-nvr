@@ -4,6 +4,10 @@
   min-height: 100vh;
   padding-bottom: calc(var(--tab-bar-h) + 24px);
   position: relative;
+
+  @media (min-width: 1024px) {
+    max-width: none;
+  }
 }
 
 /* ---------------- TOPBAR ---------------- */
@@ -50,6 +54,7 @@
   border: 1px solid var(--line);
   box-shadow: var(--shadow-card);
   padding: 0;
+  cursor: pointer;
   transition: transform 0.15s var(--ease-spring), background 0.2s var(--ease), color 0.2s var(--ease);
 
   svg {
@@ -274,6 +279,15 @@
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 14px;
+
+  @media (min-width: 1024px) {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  @media (min-width: 1440px) {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 /* ---------------- EMPTY STATE ---------------- */
@@ -358,6 +372,10 @@
   inset: 0;
   z-index: 120;
   background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
 .player-close {
@@ -392,7 +410,6 @@
 
 .player-host {
   width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
+  max-width: calc(100vh * 16 / 9);
 }
 

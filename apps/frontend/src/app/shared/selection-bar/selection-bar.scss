@@ -17,6 +17,10 @@
   transform: translateY(100%);
   transition: transform 0.3s var(--ease);
 
+  @media (min-width: 1024px) {
+    max-width: none;
+  }
+
   &.show {
     transform: translateY(0);
   }

@@ -24,6 +24,12 @@
   font-size: 14px;
 }
 
+.home-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .empty-home {
   flex: 1;
   display: flex;
@@ -195,6 +201,45 @@
   color: var(--text-faint);
   font-size: 13px;
   padding: 34px 20px;
+}
+
+@media (min-width: 1024px) {
+  .home {
+    flex-direction: row;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .home-main {
+    flex: 0 0 65%;
+    min-width: 0;
+  }
+
+  yi-player {
+    width: 100%;
+    max-width: calc((100vh - var(--tab-bar-h) - 192px) * 16 / 9);
+    margin: 0 auto;
+  }
+
+  .events {
+    flex: 1;
+    min-width: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-faint) transparent;
+
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: var(--text-faint);
+      border-radius: 4px;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

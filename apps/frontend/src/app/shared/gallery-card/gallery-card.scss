@@ -4,7 +4,7 @@
   box-shadow: var(--shadow-card);
   overflow: hidden;
   transition: transform 0.35s var(--ease), opacity 0.3s var(--ease), box-shadow 0.2s var(--ease);
-  animation: rise 0.5s var(--ease) both;
+  animation: rise 0.5s var(--ease);
 
   &.is-selected {
     box-shadow:
@@ -21,6 +21,22 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      0 2px 6px rgba(18, 22, 28, 0.08),
+      0 18px 36px -10px rgba(18, 22, 28, 0.18);
+  }
+
+  .card.is-selected:hover {
+    box-shadow:
+      0 0 0 2.5px var(--accent-blue),
+      0 2px 6px rgba(18, 22, 28, 0.08),
+      0 18px 36px -10px rgba(18, 22, 28, 0.18);
   }
 }
 
@@ -88,6 +104,7 @@
   color: #fff;
   border: none;
   padding: 0;
+  cursor: pointer;
   transition: transform 0.2s var(--ease-spring);
   z-index: 2;
 

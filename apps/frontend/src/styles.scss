@@ -24,6 +24,12 @@
   --shadow-pop: 0 20px 48px -12px rgba(18,22,28,.28);
 }
 
+@media (min-width: 1024px) {
+  :root {
+    --tab-bar-h: 0px;
+  }
+}
+
 * {
   margin: 0;
   padding: 0;

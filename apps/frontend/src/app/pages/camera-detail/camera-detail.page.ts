@@ -17,19 +17,22 @@ const STATUS_POLL_MS = 30000;
     <div class="cam-detail">
       <yi-app-back [to]="['/cameras']" />
 
-      <yi-player
-        [title]="camera()?.name || ''"
-        [liveUrl]="liveUrl()"
-        [liveFallbackMseUrl]="liveFallbackMseUrl()"
-        (liveStatus)="onLiveStatusChange($event)"
-      ></yi-player>
+      <div class="cam-main">
+        <yi-player
+          [title]="camera()?.name || ''"
+          [liveUrl]="liveUrl()"
+          [liveFallbackMseUrl]="liveFallbackMseUrl()"
+          (liveStatus)="onLiveStatusChange($event)"
+        ></yi-player>
 
-      @if (liveStatus() === 'loading') {
-        <p class="live-status">Cargando…</p>
-      } @else if (liveStatus() === 'error') {
-        <p class="live-status error">Error de stream</p>
-      }
+        @if (liveStatus() === 'loading') {
+          <p class="live-status">Cargando…</p>
+        } @else if (liveStatus() === 'error') {
+          <p class="live-status error">Error de stream</p>
+        }
+      </div>
 
+      <div class="cam-side">
       @if (camera()) {
         @if (status()?.capabilities.live_status && status()?.state) {
           <div class="cam-state" [class.on]="status()!.state === 'on'"
@@ -153,6 +156,7 @@ const STATUS_POLL_MS = 30000;
           </div>
         </div>
       }
+      </div>
     </div>
   `,
   styleUrl: './camera-detail.page.scss'

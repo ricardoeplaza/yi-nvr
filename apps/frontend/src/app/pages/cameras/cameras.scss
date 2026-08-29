@@ -8,6 +8,10 @@
   margin: 0 auto;
   padding-bottom: calc(var(--tab-bar-h) + 24px);
   position: relative;
+
+  @media (min-width: 1024px) {
+    max-width: none;
+  }
 }
 
 .cameras-subtitle {
@@ -37,6 +41,15 @@
   // (2*200 + 14 + 40). Por debajo, 1 columna.
   @media (max-width: 453px) {
     grid-template-columns: 1fr;
+  }
+
+  @media (min-width: 1024px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  @media (min-width: 1440px) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

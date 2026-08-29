@@ -73,6 +73,7 @@ interface PurgeOutcome {
           <button class="btn" (click)="loadStorage()">Reintentar</button>
         </div>
       } @else {
+        <div class="storage-body">
         <section class="section">
           <div class="section-head">
             <h2>Grabación cloud (FTP)</h2>
@@ -173,7 +174,7 @@ interface PurgeOutcome {
           }
         </section>
 
-        <section class="section">
+        <section class="section files-top">
           <div class="section-head">
             <h2>Ficheros de la tarjeta</h2>
             <button class="ghost-btn" (click)="loadStorage()">Actualizar</button>
@@ -208,7 +209,9 @@ interface PurgeOutcome {
               </div>
             }
           </div>
+        </section>
 
+        <div class="sd-panel">
           @if (sd()) {
             <div class="sd-box">
               <div class="sd-header">
@@ -222,7 +225,9 @@ interface PurgeOutcome {
           } @else {
             <p class="muted">Información de la SD no disponible.</p>
           }
+        </div>
 
+        <section class="section files-list">
           @if (dirError()) {
             <p class="inline-error">{{ dirError() }}</p>
           }
@@ -270,6 +275,7 @@ interface PurgeOutcome {
             <p class="muted">Sin directorios de eventos en la tarjeta.</p>
           }
         </section>
+        </div>
       }
     </div>
   `,

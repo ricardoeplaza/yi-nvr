@@ -28,6 +28,10 @@
   transition: transform 0.38s var(--ease);
   box-shadow: var(--shadow-pop);
 
+  @media (min-width: 1024px) {
+    max-width: 960px;
+  }
+
   &.show {
     transform: translateY(0);
   }

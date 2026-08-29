@@ -3,4 +3,10 @@
   margin: 0 auto;
   min-height: calc(100vh - var(--tab-bar-h) - env(safe-area-inset-bottom, 0px));
   padding-bottom: calc(var(--tab-bar-h) + env(safe-area-inset-bottom, 0px));
+
+  @media (min-width: 1024px) {
+    max-width: none;
+    margin-left: 220px;
+    padding: 0 32px;
+  }
 }

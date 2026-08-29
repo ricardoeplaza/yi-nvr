@@ -95,6 +95,13 @@
   }
 }
 
+@media (min-width: 1024px) {
+  .settings {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+}
+
 .about-card {
   background: var(--card);
   border: 1px solid var(--line);

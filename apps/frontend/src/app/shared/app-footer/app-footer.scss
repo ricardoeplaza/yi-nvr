@@ -43,4 +43,43 @@
       color: var(--accent-blue);
     }
   }
+
+  @media (min-width: 1024px) {
+    left: 0;
+    top: 0;
+    bottom: 0;
+    transform: none;
+    width: 220px;
+    max-width: none;
+    height: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 16px 12px;
+    border-top: none;
+    border-right: 1px solid var(--line);
+
+    .tab {
+      flex: none;
+      flex-direction: row;
+      justify-content: flex-start;
+      gap: 12px;
+      padding: 11px 14px;
+      border-radius: var(--radius-sm);
+
+      svg {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+      }
+
+      .tab-label {
+        font-size: 13.5px;
+      }
+
+      &.active {
+        background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+      }
+    }
+  }
 }

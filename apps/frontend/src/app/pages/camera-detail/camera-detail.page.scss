@@ -192,6 +192,19 @@
     }
 }
 
+@media (min-width: 1024px) {
+  .cam-detail {
+    display: grid;
+    grid-template-columns: minmax(0, 62fr) minmax(0, 38fr);
+    align-items: start;
+  }
+
+  .cam-main,
+  .cam-side {
+    min-width: 0;
+  }
+}
+
 .info-grid {
   display: flex;
   flex-direction: column;
