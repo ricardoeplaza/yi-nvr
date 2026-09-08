@@ -79,16 +79,25 @@ yi-nvr/
 │   │       └── routes/{videos,cameras,timeline,push,stream}.js
 │   └── frontend/                  # workspace Angular (fase 5)
 ├── data/                          # DB + processed (dev + Docker; SSD)
-├── recordings/                    # clips entrantes (dev + Docker; HDD)
+├── incoming/                      # staging FTP: subidas crudas (dev + Docker)
+├── recordings/                    # clips procesados, copia local (dev + Docker; HDD)
+├── remote_recordings/             # mirror remoto 3-2-1 (solo si REMOTE_MIRROR=on)
 ├── scripts/integration-check.sh
 └── docs/{ARCHITECTURE,API}.md
 ```
 
 Notas de almacenamiento: `paths.js` (apps/api/src) es la única fuente de verdad de
 las rutas. En dev los datos viven FUERA del source, en la raíz del repo: `data/`
-(DB + processed) y `recordings/` (clips entrantes), ambos gitignored. En Docker
-(fase 6) se sobreescribe vía env: `DATA_DIR=/app/data` (SSD) y
-`RECORDINGS_DIR=/app/recordings` (HDD), montados desde `./data` y `./recordings`.
+(DB + processed), `incoming/` (staging FTP), `recordings/` (copia local de clips
+procesados) y `remote_recordings/` (mirror remoto), todos gitignored. En Docker
+(fase 6) se sobreescribe vía env: `DATA_DIR=/app/data` (SSD),
+`INCOMING_DIR=/app/incoming`, `RECORDINGS_DIR=/app/recordings` (HDD) y
+`REMOTE_RECORDINGS_DIR=/app/remote_recordings`, montados desde `./data`,
+`./incoming` y `./recordings`. Backup 3-2-1: con `REMOTE_MIRROR=1`, cada clip
+procesado se COPIA (no fatal, con reintentos) a `REMOTE_RECORDINGS_DIR`, un
+directorio FIJO del contenedor que en Docker se mapea a un NFS/rclone del host
+vía volume de docker-compose (p. ej. `/srv/nvr/remote:/app/remote_recordings`);
+el app solo ve un directorio ordinario.
 
 ## Decisions
 
@@ -800,21 +809,23 @@ subida colisionaba → dos clips distintos terminaban en el mismo nombre.
   en hora **LOCAL** (coincide con el dashboard): p. ej.
   `2026-08-19T16-05-19_oficina.mp4`. Colisiones `_2`/`_3` con
   `while (fs.existsSync(finalPath))`.
-- **Dedup / re-trigger de chokidar**: el rename final ocurre DENTRO de
-  `RECORDINGS_DIR` (lo que vigila chokidar), así que chokidar dispara un `add`
-  sobre el nombre ya renombrado y `handleNewVideo` se ejecutaría una 2ª vez
-  (thumbnail/preview duplicados + violación `UNIQUE videos.original_path` al
-  reinsertar). Dos capas:
-  - `isOwnGeneratedFile()` / `OWN_FILENAME_PATTERN`: ignora cualquier basename
-    con nuestro formato generado (`YYYY-MM-DDTHH-MM-SS_cam[_N].mp4`); los crudos
-    de la cámara usan base-8 y nunca lo tienen. Cubre el `add` del rename final.
+- **Dedup / re-trigger de chokidar**: originalmente el rename final ocurría
+  DENTRO de `RECORDINGS_DIR` (lo que vigila chokidar), así que chokidar disparaba
+  un `add` sobre el nombre ya renombrado y `handleNewVideo` se ejecutaría una
+  2ª vez (thumbnail/preview duplicados + violación `UNIQUE videos.original_path`
+  al reinsertar). Resuelto con el split del backup 3-2-1: `INCOMING_DIR`
+  (staging FTP, lo ÚNICO que vigila chokidar) + `RECORDINGS_DIR` (procesados,
+  copia local). El rename mueve el clip FUERA de la carpeta vigilada (rename con
+  fallback cross-device `EXDEV`: copy + unlink), así el filtro por nombre
+  (`OWN_FILENAME_PATTERN`) se eliminó. Capa restante:
   - Set `processingFiles` (marcado al entrar en `handleNewVideo`, liberado a
     los 5 s): cubre los `change` intermedios durante remux/estabilidad.
-  - **TODO (futuro corto)**: desdoblar `RECORDINGS_DIR` en `incoming` (subida
-    FTP, lo único que vigila chokidar) + `recording` (procesados, listos para
-    archivar). El rename movería el clip fuera de la carpeta vigilada y el
-    filtro de nombre dejaría de ser necesario. Extra: `incoming` podría
-    mapearse a un ramdisk (tmpfs) para evitar la escritura temporal en disco.
+  - Placeholder anti-re-upload: tras mover el clip a `RECORDINGS_DIR` se deja
+    un archivo de 0 bytes con el nombre crudo original en `INCOMING_DIR` (la
+    cámara solo comprueba la existencia del nombre y nunca re-lee el
+    contenido); `handleNewVideo` ignora los archivos de 0 bytes al entrar.
+  - Extra: `incoming` puede mapearse a un ramdisk (tmpfs) para evitar la
+    escritura temporal en disco (volumen tmpfs comentado en docker-compose).
 - **Eliminación opcional de la pista low-res**: `removeLowResTrack()` elimina la
   pista de vídeo de baja resolución (640x360, stream 1) por stream copy
   (ffmpeg NO transcodifica). El clip tiene 3 streams: 0 = vídeo 1920x1080 H.264,

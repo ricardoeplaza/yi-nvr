@@ -15,9 +15,12 @@ apps/frontend/dist
 # Build de Angular copiado a mano en dev (lo genera el stage frontend-build)
 apps/api/src/public
 
-# Storage: datos reales, NUNCA en la imagen (en Docker son volúmenes: ./data, ./recordings)
+# Storage: datos reales, NUNCA en la imagen (en Docker son volúmenes: ./data,
+# ./incoming, ./recordings; el remoto se mapea al volume de /app/remote_recordings)
 data
+incoming
 recordings
+remote_recordings
 storage
 apps/api/src/storage
 *.db

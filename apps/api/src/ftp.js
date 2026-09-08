@@ -15,7 +15,10 @@
  *    el bind requiere root/admin o CAP_NET_BIND_SERVICE.
  *  - Modo pasivo: Habilitado para soportar NAT/firewalls
  *  - Autenticación: Simple (usuario/contraseña configurables)
- *  - Directorio raíz: src/storage/ftp (donde se depositan los videos)
+ *  - Directorio raíz: INCOMING_DIR (staging FTP; lo único que vigila chokidar).
+ *    Tras el rename, el clip se mueve a RECORDINGS_DIR y opcionalmente se
+ *    espeja al mirror remoto. Queda un placeholder de 0 bytes para que la
+ *    cámara no re-suba el clip.
  */
 
 const FtpSrv = require('ftp-srv');
@@ -31,7 +34,8 @@ const { processVideo } = require('./processor');
 const { insertVideo, getCameraSetting } = require('./database');
 const { getCameraByFtpDir } = require('./camera-registry');
 const webpush = require('./push/webpush');
-const { RECORDINGS_DIR } = require('./paths');
+const { INCOMING_DIR, RECORDINGS_DIR, REMOTE_RECORDINGS_DIR } = require('./paths');
+const { mirrorToRemote } = require('./remote-mirror');
 
 // Configuración del servidor FTP
 const FTP_PORT = process.env.FTP_PORT || 21;
@@ -58,40 +62,6 @@ if (process.env.FTP_PASSIVE_RANGE) {
     } else {
         console.warn(`[FTP] FTP_PASSIVE_RANGE inválido: "${process.env.FTP_PASSIVE_RANGE}", usando 1024-1050`);
     }
-}
-
-// Los nombres que NOSOTROS generamos siguen siempre el patrón
-// YYYY-MM-DDTHH-MM-SS_camara[_N].mp4 (ver resolveFinalPath). Los archivos
-// crudos que sube la cámara nunca tienen este formato (usan el esquema
-// base-8 de ftppush.sh, ej. "05M19S41.mp4").
-//
-// Como el rename final se hace DENTRO del mismo directorio que vigila
-// chokidar (RECORDINGS_DIR), ese rename es indistinguible para chokidar de
-// "llegó un archivo nuevo": dispara un 'add' sobre el nombre ya renombrado,
-// y sin este filtro handleNewVideo se ejecutaría una SEGUNDA vez sobre un
-// vídeo que ya procesamos nosotros mismos (duplicando thumbnail/preview y
-// violando el UNIQUE de videos.original_path al reinsertar).
-const OWN_FILENAME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}_.+\.mp4$/i;
-
-// TODO(futuro corto): desdoblar RECORDINGS_DIR en dos carpetas para eliminar
-// este workaround de nombre (OWN_FILENAME_PATTERN / isOwnGeneratedFile):
-//   - <incoming>: donde la cámara sube por FTP y lo ÚNICO que vigila chokidar.
-//   - <recording> (el RECORDINGS_DIR actual): donde viven los clips YA
-//     procesados y listos para archivar/servir.
-// Con ese split, el rename final MOVERÍA el clip FUERA de la carpeta vigilada,
-// así chokidar nunca vería nuestros propios renames y el filtro de nombre
-// dejaría de ser necesario.
-// Extra: <incoming> podría mapearse a un ramdisk (tmpfs) para evitar la
-// escritura temporal en disco (más rápido y menos desgaste en el SBC).
-
-/**
- * Indica si el nombre de archivo corresponde al patrón que NOSOTROS
- * generamos en resolveFinalPath (y no a una subida cruda de la cámara).
- * @param {string} filePath
- * @returns {boolean}
- */
-function isOwnGeneratedFile(filePath) {
-    return OWN_FILENAME_PATTERN.test(path.basename(filePath));
 }
 
 // Set para rastrear archivos que ya están siendo procesados
@@ -159,9 +129,16 @@ function getFtpSuggestedConfig(ftpDir) {
     };
 }
 
-// Aseguramos que el directorio FTP exista
+// Aseguramos staging FTP, copia local y mirror remoto (este último suele ser
+// un volume de compose NFS/rclone; sin volume se crea en el sitio fijo).
+if (!fs.existsSync(INCOMING_DIR)) {
+    fs.mkdirSync(INCOMING_DIR, { recursive: true });
+}
 if (!fs.existsSync(RECORDINGS_DIR)) {
     fs.mkdirSync(RECORDINGS_DIR, { recursive: true });
+}
+if (!fs.existsSync(REMOTE_RECORDINGS_DIR)) {
+    fs.mkdirSync(REMOTE_RECORDINGS_DIR, { recursive: true });
 }
 
 // Creamos la instancia del servidor FTP
@@ -182,7 +159,7 @@ const ftpServer = new FtpSrv({
  * @returns {string} - Nombre de la cámara
  */
 function extractCameraName(filePath) {
-    const relativePath = path.relative(RECORDINGS_DIR, filePath);
+    const relativePath = path.relative(INCOMING_DIR, filePath);
     const parts = relativePath.split(path.sep);
     // Si hay subdirectorio, usamos el primer segmento como nombre de cámara
     return parts.length > 1 ? parts[0] : 'default';
@@ -353,14 +330,6 @@ async function handleNewVideo(originalPath) {
         return;
     }
 
-    // Si el nombre ya tiene NUESTRO formato final, este evento no viene de
-    // una subida de la cámara: es chokidar reaccionando a nuestro propio
-    // rename dentro del directorio vigilado. Lo ignoramos para no
-    // reprocesar (y reinsertar) un vídeo que ya indexamos.
-    if (isOwnGeneratedFile(originalPath)) {
-        return;
-    }
-
     // Evitamos procesar el mismo archivo dos veces. Se marca YA aquí (no al
     // final del pipeline) para cubrir toda la ventana de procesamiento:
     // espera de estabilidad + remux + rename pueden tardar varios segundos,
@@ -377,6 +346,14 @@ async function handleNewVideo(originalPath) {
     let currentPath = originalPath;
 
     try {
+        // Placeholder de 0 bytes (ver creación más abajo): un upload real de
+        // cámara nunca pesa 0, así que lo ignoramos.
+        const incomingStats = fs.statSync(currentPath);
+        if (incomingStats.size === 0) {
+            console.log(`[FTP] Placeholder de 0 bytes ignorado: ${path.basename(currentPath)}`);
+            return;
+        }
+
         // Esperamos un momento para asegurar que el archivo esté completamente escrito
         // (especialmente importante para archivos grandes subidos por FTP)
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -418,11 +395,29 @@ async function handleNewVideo(originalPath) {
             }
         }
 
-        // Renombramos a <timestamp>_<cámara>.mp4 para evitar colisiones (el
-        // nombre base-8 no incluye hora ni fecha).
-        const finalPath = resolveFinalPath(path.dirname(currentPath), cameraName, timestamp);
-        fs.renameSync(currentPath, finalPath);
+        // Renombramos a <timestamp>_<cámara>.mp4 y movemos el clip fuera de
+        // staging a RECORDINGS_DIR. Fallback EXDEV: incoming puede ser tmpfs.
+        const finalPath = resolveFinalPath(RECORDINGS_DIR, cameraName, timestamp);
+        try {
+            fs.renameSync(currentPath, finalPath);
+        } catch (err) {
+            if (err.code === 'EXDEV') {
+                fs.copyFileSync(currentPath, finalPath);
+                fs.unlinkSync(currentPath);
+            } else {
+                throw err;
+            }
+        }
         currentPath = finalPath;
+
+        // Placeholder de 0 bytes con el nombre crudo: la cámara solo comprueba
+        // que existe y no re-sube el clip. No fatal: si falla, vuelve el
+        // re-upload antiguo.
+        try {
+            fs.writeFileSync(originalPath, '');
+        } catch (err) {
+            console.warn(`[FTP] No se pudo crear el placeholder en ${originalPath}: ${err.message}`);
+        }
 
         // Procesamos el video (thumbnail + preview)
         const processedData = await processVideo(currentPath);
@@ -442,6 +437,9 @@ async function handleNewVideo(originalPath) {
 
         sendClipNotification(cameraName, videoRecord);
 
+        // Mirror 3-2-1 al remoto (no-op si está desactivado; nunca lanza).
+        await mirrorToRemote(currentPath);
+
     } catch (err) {
         console.error(`[FTP] Error procesando ${path.basename(originalPath)}:`, err.message);
     } finally {
@@ -459,9 +457,9 @@ async function handleNewVideo(originalPath) {
  * Monitorea el directorio FTP en busca de nuevos archivos .mp4.
  */
 function setupFileWatcher() {
-    console.log(`[FTP] Iniciando monitoreo de directorio: ${RECORDINGS_DIR}`);
+    console.log(`[FTP] Iniciando monitoreo de directorio: ${INCOMING_DIR}`);
     
-    const watcher = chokidar.watch(RECORDINGS_DIR, {
+    const watcher = chokidar.watch(INCOMING_DIR, {
         ignored: /(^|[\/\\])\../, // Ignorar archivos ocultos
         persistent: true,
         ignoreInitial: true, // No procesar archivos existentes al inicio
@@ -508,8 +506,8 @@ function setupEventHandlers() {
         
         if (username === FTP_USER && password === FTP_PASS) {
             console.log(`[FTP] Usuario ${username} autenticado correctamente`);
-            // Resolvemos con el directorio raíz para este usuario
-            resolve({ root: RECORDINGS_DIR });
+            // Resolvemos con el directorio raíz (staging) para este usuario
+            resolve({ root: INCOMING_DIR });
         } else {
             console.warn(`[FTP] Autenticación fallida para ${username}`);
             reject(new Error('Invalid username or password'));
@@ -543,9 +541,10 @@ async function startFtpServer() {
         await ftpServer.listen();
         ftpListening = true;
         console.log(`[FTP] Servidor iniciado en ${FTP_HOST}:${FTP_PORT}`);
-        console.log(`[FTP] Directorio raíz: ${RECORDINGS_DIR}`);
+        console.log(`[FTP] Directorio raíz (staging): ${INCOMING_DIR}`);
+        console.log(`[FTP] Directorio de grabaciones: ${RECORDINGS_DIR}`);
         console.log(`[FTP] Credenciales: ${FTP_USER} / ${FTP_PASS}`);
-        
+
         // Iniciamos el watcher de archivos
         setupFileWatcher();
         

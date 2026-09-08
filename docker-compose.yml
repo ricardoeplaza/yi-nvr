@@ -9,11 +9,23 @@ services:
       - "1024-1027:1024-1027"
     volumes:
       - ./data:/app/data
+      - ./incoming:/app/incoming
       - ./recordings:/app/recordings
       - ./infra/cameras.json:/app/infra/cameras.json
+      # Backup 3-2-1 (opcional): mapear el mountpoint remoto del host (NFS o
+      # rclone) sobre el directorio fijo /app/remote_recordings. Ejemplo:
+      #   - /srv/nvr/remote_recordings:/app/remote_recordings
+      #     + REMOTE_MIRROR=1 en .env
+      # Staging rápido (opcional, alternativa al bind de ./incoming): tmpfs/ramdisk
+      #   - type: tmpfs
+      #     target: /app/incoming
+      #     size: 512m
     environment:
       - DATA_DIR=/app/data
+      - INCOMING_DIR=/app/incoming
       - RECORDINGS_DIR=/app/recordings
+      - REMOTE_RECORDINGS_DIR=/app/remote_recordings
+      - REMOTE_MIRROR=${REMOTE_MIRROR:-}
       - CAMERAS_JSON_PATH=/app/infra/cameras.json
       - FTP_PASSIVE_RANGE=1024-1027
       - FFMPEG_CONCURRENCY=${FFMPEG_CONCURRENCY:-1}
