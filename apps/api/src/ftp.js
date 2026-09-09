@@ -32,7 +32,8 @@ const os = require('os');
 const { execFileSync } = require('child_process');
 const { processVideo } = require('./processor');
 const { insertVideo, getCameraSetting } = require('./database');
-const { getCameraByFtpDir } = require('./camera-registry');
+const { getCameraByFtpDir, getEcosystem } = require('./camera-registry');
+const yiHackAdapter = require('./camera/adapters/yi-hack');
 const webpush = require('./push/webpush');
 const { INCOMING_DIR, RECORDINGS_DIR, REMOTE_RECORDINGS_DIR } = require('./paths');
 const { mirrorToRemote } = require('./remote-mirror');
@@ -295,11 +296,31 @@ function resolveFinalPath(dir, cameraName, timestamp) {
  * de push por cámara (camera_settings; default: activado). notify() nunca
  * lanza, pero lo envolvemos igualmente para que un fallo aquí no rompa el
  * pipeline de indexación del clip.
+ *
+ * El deep-link apunta al dashboard de la app (ruta '' en el router, home)
+ * con un query param `?video=<id numérico del clip>`: el frontend lo lee para
+ * seleccionar directamente este clip en la señal `selectedVideo` (sin pasar
+ * por la galería).
+ *
+ * Un clip indexado por FTP es evidencia directa de que la cámara sube clips:
+ * invalidamos los probes en caché de esa cámara (adapter yi-hack) para que la
+ * próxima lectura refleje el estado real del dispositivo (FTP_UPLOAD y
+ * almacenamiento/free_sd). Auto-sanación: cualquier caché que diga lo
+ * contrario está obsoleta desde que llegó el clip.
  * @param {string} cameraName
  * @param {object} videoRecord - Registro devuelto por insertVideo()
  */
 function sendClipNotification(cameraName, videoRecord) {
     const pushCamera = getCameraByFtpDir(cameraName);
+    // Auto-sanación de la caché de probes: un clip que llega por FTP invalida
+    // los probes en caché de esta cámara (FTP_UPLOAD, almacenamiento/free_sd)
+    // para que la próxima lectura sondee de nuevo el dispositivo. Solo tiene
+    // sentido para yi-hack (los probes viven en ese adapter); para generic es
+    // un no-op inofensivo, pero lo limitamos igualmente para no tocar la caché
+    // de un adapter que no aplica.
+    if (pushCamera && getEcosystem(pushCamera) === 'yi-hack') {
+        yiHackAdapter.invalidateProbes(pushCamera);
+    }
     if (pushCamera && !getCameraSetting(pushCamera.id).push_enabled) {
         return;
     }
@@ -307,11 +328,15 @@ function sendClipNotification(cameraName, videoRecord) {
         const thumbnailUrl = videoRecord.thumbnail_path
             ? `/processed/${path.basename(videoRecord.thumbnail_path)}`
             : undefined;
+        // Deep-link al dashboard (home del router) con el id del clip: el
+        // frontend selecciona este clip en `selectedVideo`. Fallback a '/' si
+        // por alguna razón videoRecord.id no existiera.
+        const url = videoRecord.id != null ? `/?video=${videoRecord.id}` : '/';
         webpush.notify({
             title: 'Nuevo clip',
             body: cameraName,
-            icon: thumbnailUrl,
-            url: `/videos/${videoRecord.id}`
+            image: thumbnailUrl,
+            url
         });
     } catch (e) {
         console.error('[FTP] Error en la notificación push del clip:', e.message);

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { ActivatedRoute, ParamMap } from '@angular/router';
+import { BehaviorSubject, of, throwError } from 'rxjs';
 
 import { DashboardPage } from './dashboard.page';
 import { CameraService } from '../../services/camera.service';
@@ -8,6 +8,17 @@ import { VideoService } from '../../services/video.service';
 import { StreamService } from '../../services/stream.service';
 import { Camera } from '../../models/camera.model';
 import { Video } from '../../models/video.model';
+
+// ParamMap es solo un tipo en Angular 22: se simula con los miembros que usa.
+function paramMapOf(params: Record<string, string>): ParamMap {
+  const map = new Map(Object.entries(params));
+  return {
+    get: (key: string) => map.get(key) ?? null,
+    getAll: (key: string) => (map.has(key) ? [map.get(key)!] : []),
+    has: (key: string) => map.has(key),
+    keys: [...map.keys()],
+  };
+}
 
 function makeCamera(): Camera {
   return {
@@ -52,13 +63,31 @@ describe('DashboardPage', () => {
   const D = makeVideo(4, '2026-08-20T07:00:00Z');
 
   let setFavoriteSpy: ReturnType<typeof vi.fn>;
+  // Emite los query params actuales; el componente se suscribe en ngOnInit.
+  let queryParamsSubject: BehaviorSubject<ParamMap>;
 
-  async function createPage() {
+  interface CreatePageOptions {
+    videos?: Video[];
+    queryParams?: Record<string, string>;
+  }
+
+  async function createPage(options: CreatePageOptions = {}) {
+    const { videos = [D, B, A, C], queryParams = {} } = options;
     setFavoriteSpy = vi.fn(() => of({ success: true, favorite: true }));
+    // snapshot.queryParamMap refleja los params iniciales (el componente lo lee
+    // tras cargar la lista, que es después de montar).
+    const initialParams = paramMapOf(queryParams);
+    queryParamsSubject = new BehaviorSubject(initialParams);
     await TestBed.configureTestingModule({
       imports: [DashboardPage],
       providers: [
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => null } } } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: { paramMap: { get: () => null }, queryParamMap: initialParams },
+            queryParamMap: queryParamsSubject.asObservable(),
+          },
+        },
         {
           provide: CameraService,
           useValue: { getCameras: () => of({ success: true, count: 1, data: [makeCamera()] }) },
@@ -67,7 +96,7 @@ describe('DashboardPage', () => {
         {
           provide: VideoService,
           useValue: {
-            getVideos: () => of({ success: true, count: 4, data: [D, B, A, C] }),
+            getVideos: () => of({ success: true, count: videos.length, data: videos }),
             setFavorite: setFavoriteSpy,
           },
         },
@@ -109,6 +138,35 @@ describe('DashboardPage', () => {
     const fixture = await createPage();
     expect(fixture.componentInstance.selectedVideo()).toBeNull();
     fixture.destroy();
+  });
+
+  describe('deep-link ?video=<id> (notificación push)', () => {
+    it('selecciona el clip del query param al cargar la lista', async () => {
+      const fixture = await createPage({ queryParams: { video: '3' } });
+      expect(fixture.componentInstance.selectedVideo()?.id).toBe(3);
+      fixture.destroy();
+    });
+
+    it('ignora un query param no numérico', async () => {
+      const fixture = await createPage({ queryParams: { video: 'abc' } });
+      expect(fixture.componentInstance.selectedVideo()).toBeNull();
+      fixture.destroy();
+    });
+
+    it('ignora un id que no existe en la lista', async () => {
+      const fixture = await createPage({ queryParams: { video: '9999' } });
+      expect(fixture.componentInstance.selectedVideo()).toBeNull();
+      fixture.destroy();
+    });
+
+    it('selecciona el clip cuando cambia el param con el dashboard ya montado', async () => {
+      const fixture = await createPage();
+      const c = fixture.componentInstance;
+      expect(c.selectedVideo()).toBeNull();
+      queryParamsSubject.next(paramMapOf({ video: '2' }));
+      expect(c.selectedVideo()?.id).toBe(2);
+      fixture.destroy();
+    });
   });
 
   describe('autoplay: siguiente clip más nuevo', () => {
