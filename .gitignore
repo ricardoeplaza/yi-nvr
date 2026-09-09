@@ -12,9 +12,12 @@ infra/go2rtc/go2rtc.yaml
 infra/mosquitto/mosquitto.conf
 
 # Storage: videos, processed media, SQLite DB (real data, never in git)
-# Dev y Docker comparten ./data y ./recordings en la raíz del repo.
+# Dev y Docker comparten ./data, ./incoming, ./recordings y ./remote_recordings
+# en la raíz del repo.
 data/
+incoming/
 recordings/
+remote_recordings/
 apps/api/src/storage/
 storage/
 *.db

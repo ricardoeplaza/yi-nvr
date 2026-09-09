@@ -7,7 +7,9 @@
  *
  * Lógica portada sin cambiar TTL, single-flight ni timeouts:
  *  - camera-status-service.js: caché de probes (TTL env
- *    CAMERA_STATUS_CACHE_TTL_MS, default 30 s, 0 desactiva; single-flight:
+ *    CAMERA_STATUS_CACHE_TTL_MS, default 1 h como red de seguridad — la
+ *    frescura la garantizan las invalidaciones por eventos; 0 desactiva;
+ *    single-flight:
  *    la caché guarda la promesa en vuelo, no el valor), los 3 probes, y
  *    setCameraConfig (semántica CONFIG_REJECTED).
  *  - routes/storage.js: fetchCameraJson, sanitización 14-chars,
@@ -43,12 +45,15 @@ const EVENT_OP_TIMEOUT_MS = 5000;
 const EVENTSDIR_TIMEOUT_MS = 30000;
 
 // TTL de la caché de probes por cámara (ms). Env CAMERA_STATUS_CACHE_TTL_MS;
-// default 30 s; 0 desactiva la caché (siempre sondear).
+// default 1 h; 0 desactiva la caché (siempre sondear). TTL larga a propósito:
+// la frescura la garantizan las invalidaciones por eventos (escritura de
+// config, reboot offline→online, clip indexado), no el expiry; la TTL queda
+// como red de seguridad.
 const PROBE_CACHE_TTL_MS = (() => {
     const raw = process.env.CAMERA_STATUS_CACHE_TTL_MS;
-    if (raw === undefined || raw === '') return 30000;
+    if (raw === undefined || raw === '') return 3600000;
     const n = parseInt(raw, 10);
-    return Number.isFinite(n) && n >= 0 ? n : 30000;
+    return Number.isFinite(n) && n >= 0 ? n : 3600000;
 })();
 
 // Caché de probes por cámara: cam.id -> { ts, promise }. Single-flight:

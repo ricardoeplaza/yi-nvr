@@ -1,4 +1,5 @@
 import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { ActivatedRoute, ParamMap } from '@angular/router';
 import { CameraService } from '../../services/camera.service';
 import { VideoService } from '../../services/video.service';
 import { Camera } from '../../models/camera.model';
@@ -82,6 +83,7 @@ function pad2(n: number): string {
 export class DashboardPage implements OnInit, OnDestroy {
   private cameraService = inject(CameraService);
   private videoService = inject(VideoService);
+  private route = inject(ActivatedRoute);
 
   cameras = signal<Camera[]>([]);
   loadingCameras = signal(true);
@@ -108,11 +110,21 @@ export class DashboardPage implements OnInit, OnDestroy {
       next: (res) => {
         if (this.destroyed) return;
         this.applyDataset(res.data || []);
+        // Deep-link de la notificación push (?video=<id>): al terminar de
+        // cargar la lista, selecciona el clip que enlazaba la notificación.
+        this.selectVideoFromParams(this.route.snapshot.queryParamMap);
       },
       error: () => {
         if (this.destroyed) return;
         this.applyDataset([]);
       }
+    });
+
+    // Otra notificación push abierta con el dashboard ya montado cambia el
+    // param sin recargar la página.
+    this.route.queryParamMap.subscribe((params) => {
+      if (this.destroyed) return;
+      this.selectVideoFromParams(params);
     });
   }
 
@@ -151,6 +163,22 @@ export class DashboardPage implements OnInit, OnDestroy {
   selectVideo(vid: Video) {
     if (this.destroyed) return;
     this.selectedVideo.set(vid);
+  }
+
+  /**
+   * Deep-link de la notificación push: `?video=<id>` selecciona el clip con
+   * ese id si está en la lista cargada. Ignora el param ausente, no numérico
+   * o con un id que no esté en la lista (p. ej. clip borrado).
+   */
+  private selectVideoFromParams(params: ParamMap) {
+    const raw = params.get('video');
+    if (raw === null) return;
+    const id = Number(raw);
+    if (!Number.isInteger(id)) return;
+    const vid = this.videos().find((v) => v.id === id);
+    if (vid) {
+      this.selectVideo(vid);
+    }
   }
 
   // Autoplay: al terminar un clip, avanza al siguiente más nuevo siguiendo el

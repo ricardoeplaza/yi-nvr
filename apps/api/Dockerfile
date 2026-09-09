@@ -31,7 +31,9 @@ COPY --from=frontend-build /frontend/dist/frontend/browser ./public
 
 ENV NODE_ENV=production \
     DATA_DIR=/app/data \
+    INCOMING_DIR=/app/incoming \
     RECORDINGS_DIR=/app/recordings \
+    REMOTE_RECORDINGS_DIR=/app/remote_recordings \
     PUBLIC_DIR=/app/public
 
 HEALTHCHECK --interval=30s --timeout=3s \

@@ -71,7 +71,8 @@ yi-nvr/
 │   │       └── routes/      # videos, cameras, timeline, push, stream
 │   └── frontend/            # Angular PWA
 ├── data/                    # DB + processed (dev + Docker volume; SSD recommended)
-├── recordings/              # incoming clips (dev + Docker volume; HDD recommended)
+├── incoming/                # FTP staging: raw camera uploads (dev + Docker volume)
+├── recordings/              # local copy of processed clips (dev + Docker volume; HDD recommended)
 └── docs/
     ├── ARCHITECTURE.md      # stack, environments, decision log
     └── API.md               # full API reference
@@ -136,9 +137,12 @@ docker compose up -d
 | Directory | Purpose | Recommended |
 |-----------|---------|-------------|
 | `./data/` | SQLite DB + processed media (thumbnails, previews) | SSD |
-| `./recordings/` | Raw clips from cameras (one subdir per `ftp_dir`) | HDD |
+| `./incoming/` | FTP staging: raw camera uploads (one subdir per `ftp_dir`); the only dir the watcher monitors | tmpfs / HDD |
+| `./recordings/` | Local copy of renamed/processed clips (served at `/videos`) | HDD |
 
-In development (`npm start`) the app uses the same `./data/` and `./recordings/` directories at the repo root (created automatically, gitignored) — data always lives outside the source tree, in both dev and Docker.
+In development (`npm start`) the app uses the same `./data/`, `./incoming/` and `./recordings/` directories at the repo root (created automatically, gitignored) — data always lives outside the source tree, in both dev and Docker.
+
+**Remote mirror (3-2-1 backup)**: optionally, every processed clip is also *copied* to `REMOTE_RECORDINGS_DIR` when `REMOTE_MIRROR=1`. That is a **fixed** dir inside the container (`/app/remote_recordings` in Docker, `<repo>/remote_recordings` in dev) — you map your host's NFS or rclone mountpoint onto it via a `docker-compose.yml` volume (e.g. `/srv/nvr/remote_recordings:/app/remote_recordings`; setup notes in `.env.example`). The app does plain filesystem I/O against it (no provider logic); mirror failures are logged with retries and never break the local pipeline.
 
 ## API (summary)
 

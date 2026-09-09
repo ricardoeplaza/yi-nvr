@@ -79,16 +79,25 @@ yi-nvr/
 │   │       └── routes/{videos,cameras,timeline,push,stream}.js
 │   └── frontend/                  # workspace Angular (fase 5)
 ├── data/                          # DB + processed (dev + Docker; SSD)
-├── recordings/                    # clips entrantes (dev + Docker; HDD)
+├── incoming/                      # staging FTP: subidas crudas (dev + Docker)
+├── recordings/                    # clips procesados, copia local (dev + Docker; HDD)
+├── remote_recordings/             # mirror remoto 3-2-1 (solo si REMOTE_MIRROR=on)
 ├── scripts/integration-check.sh
 └── docs/{ARCHITECTURE,API}.md
 ```
 
 Notas de almacenamiento: `paths.js` (apps/api/src) es la única fuente de verdad de
 las rutas. En dev los datos viven FUERA del source, en la raíz del repo: `data/`
-(DB + processed) y `recordings/` (clips entrantes), ambos gitignored. En Docker
-(fase 6) se sobreescribe vía env: `DATA_DIR=/app/data` (SSD) y
-`RECORDINGS_DIR=/app/recordings` (HDD), montados desde `./data` y `./recordings`.
+(DB + processed), `incoming/` (staging FTP), `recordings/` (copia local de clips
+procesados) y `remote_recordings/` (mirror remoto), todos gitignored. En Docker
+(fase 6) se sobreescribe vía env: `DATA_DIR=/app/data` (SSD),
+`INCOMING_DIR=/app/incoming`, `RECORDINGS_DIR=/app/recordings` (HDD) y
+`REMOTE_RECORDINGS_DIR=/app/remote_recordings`, montados desde `./data`,
+`./incoming` y `./recordings`. Backup 3-2-1: con `REMOTE_MIRROR=1`, cada clip
+procesado se COPIA (no fatal, con reintentos) a `REMOTE_RECORDINGS_DIR`, un
+directorio FIJO del contenedor que en Docker se mapea a un NFS/rclone del host
+vía volume de docker-compose (p. ej. `/srv/nvr/remote:/app/remote_recordings`);
+el app solo ve un directorio ordinario.
 
 ## Decisions
 
@@ -198,6 +207,15 @@ de fábrica (`mqtt/topics.js`). Referencia real (cámara `oficina`, en
 | ai_human / ai_vehicle / ai_animal | `ai_human_detection` / `ai_vehicle_detection` / `ai_animal_detection` | `human` / `vehicle` / `animal` |
 | baby_crying | `baby_crying` | `crying` |
 | sound | `sound_detection` | `sound` |
+
+- **Bus interno** (`mqttEvents`, EventEmitter exportado por `mqtt/client.js`;
+  el cliente NO acopla nada de push): emite `camera-motion` (para
+  `motion_start`/`ai_human`/`ai_vehicle`/`ai_animal`) y `camera-online`
+  (`{cameraId}`, SOLO en transición offline→online — reboot o recuperación de
+  energía; NO en el primer online tras el arranque del NVR, donde no hay
+  estado previo que invalidar). El segundo lo consume `server.js` para
+  invalidar la caché de probes del adapter yi-hack (D29/D31): es el momento
+  en que la cámara aplica su config (`FTP_UPLOAD`, etc.).
 
 ### D8 (fase 2) — `motion_image` no se suscribe
 El tema `<prefix>/<motion_image>` lleva JPEGs binarios pesados. El NVR no los
@@ -379,23 +397,57 @@ programa RTSP consume menos CPU/RAM bajo la misma carga.
   timers `.unref()`) borra las filas con `COALESCE(last_used_at, created_at)`
   anterior a 180 días.
 - **Formato del payload** (decisión menor): JSON plano
-  `{title, body, icon, url, data}`. El service worker del frontend (fase 5)
-  lo parsea y construye la `Notification` del navegador; `icon` es la URL
-  relativa del thumbnail (`/processed/<archivo>.jpg`) y `url` la ruta de la
-  app a la que enlazar al hacer clic.
+  `{title, body, icon, image, url, data}`. El service worker del frontend
+  (fase 5) lo parsea y construye la `Notification` del navegador:
+  - `icon`: URL relativa del ícono pequeño de la app
+    (`/icons/icon-192x192.png` por defecto si no viene).
+  - `image`: URL relativa del thumbnail grande
+    (`/processed/<archivo>.jpg`); Android la muestra como imagen de la
+    notificación, iOS la ignora. Solo presente en el trigger de clip.
+  - `url`: URL a la que enlazar al hacer clic (deep-link): ruta absoluta de
+    la app (p. ej. `/?video=<id>` al dashboard) o URL externa de la cámara
+    (página de eventos yi-hack).
 - **Triggers** (sin acoplar push dentro de `mqtt/client.js`):
-  - *Movimiento* (inmediato): `server.js` se suscribe a
-    `mqttEvents.on('camera-motion')` y llama a `notify({title:'Movimiento',
-    body:<nombre>, url:'/cameras/<id>'})`.
-  - *Clip procesado* (enriquecido): `ftp.js` (`handleNewVideo`) llama a
-    `notify({title:'Nuevo clip', body:<cámara>, icon:<thumbnail_url>,
-    url:'/videos/<id>'})` tras `processVideo` + `insertVideo` exitosos.
+  - *Movimiento* (dedup por subida FTP; sin fallback ni pendientes):
+    `server.js` se suscribe a `mqttEvents.on('camera-motion')`. Dos ramas,
+    decididas leyendo la caché de probes del adapter yi-hack (D29/D31) en
+    vez de un espejo en memoria (eliminado, D31):
+    - generic o cámara ausente en el registro → **silencio**: el NVR solo
+      indexa por FTP y la notificación «Nuevo clip» la envía `ftp.js` al
+      indexar el clip (trigger de abajo).
+    - yi-hack → `await adapter.getSystemConfig(camera)` (caché de probes:
+      single-flight, TTL 1 h, invalidada por eventos):
+      `FTP_UPLOAD === 'yes'` → **silencio** (la cámara sube el clip y
+      `ftp.js` notifica al indexarlo); cualquier otro caso (`'no'`, campo
+      ausente o probe fallido — cámara offline/unreachable) → notificación
+      inmediata «Movimiento» (default seguro: no llegará clip por FTP, así
+      que el usuario siempre recibe algo). Su enlace es la página de eventos
+      de la propia cámara yi-hack:
+      `http://<host>/index.html?page=eventsfile&dirname=<AAAA><MM><DD><hh>`
+      (formato `AAAAYMMMDHHH`, p. ej. `2026Y09M09D08H`), hora local del
+      servidor truncada a la hora (asume cámara y NVR en la misma zona
+      horaria). Sin `host` → fallback `/cameras/<id>`. No existe el caso
+      «desconocido»: un probe fallido se trata como «no sube por FTP».
+  - *Clip indexado* (enriquecido): `ftp.js` (`sendClipNotification`) llama a
+    `notify({title:'Nuevo clip', body:<cámara>, image:<thumbnail_url>,
+    url:'/?video=<id numérico>'})` tras `processVideo` + `insertVideo`
+    exitosos, y llama a `adapter.invalidateProbes(cam)` (solo yi-hack): un
+    clip llegado por FTP es evidencia directa de que la cámara sube, así que
+    cualquier probe en caché que diga lo contrario está obsoleto
+    (auto-sanación; además refresca lecturas de almacenamiento como
+    `free_sd`). El deep-link apunta al dashboard (home del router), que lee
+    el query param `?video=<id>` y selecciona el clip en su señal
+    `selectedVideo` (`dashboard.page.ts`).
+  - **Sin espejo**: la fuente única es la caché de probes del adapter
+    yi-hack (D29), compartida entre la UI de estado y el dedup de push —
+    ver D31 para el rediseño que eliminó `push/ftp-upload-state.js`.
   - `notify()` es a prueba de fallos por diseño (try/catch + manejo de
     promesa por envío; nunca lanza al llamador).
-- **DEFERRED**: la entrega real en un navegador (service worker de push,
-  permiso del usuario, prueba con endpoint FCM real) queda pendiente de la
-  fase 5 (frontend). En esta fase se verifica el fan-out HTTP contra
-  endpoints falsos (2xx/404/410) y el trigger MQTT de movimiento.
+- **DEFERRED**: la prueba con endpoint FCM real queda pendiente en
+  integración. La entrega en el navegador está cubierta por D27 (service
+  worker `push/sw.js` + registro desde `PushService.registerPush`). En esta
+  fase se verifica el fan-out HTTP contra endpoints falsos (2xx/404/410) y el
+  trigger MQTT de movimiento.
 
 ### D16 (fase 5) — Live view: WebRTC (WHEP) como primaria, MSE real (MediaSource) como fallback automático
 - **Fuente primaria**: WebRTC por WHEP — `StreamService.startWebRtc` contra
@@ -751,22 +803,30 @@ vive en `apps/api/src/public` (generado por `npm run build:web`).
 
 ### D27 (yi-api) — push/sw.js: service worker de Web Push como asset estático
 
-El service worker de push (`/push/sw.js`) es un archivo estático mínimo
-(sin framework) que se registra con scope `/push/` desde el frontend
-(`PushService`). Coexiste con `ngsw` (scope `/`) porque los scopes son
-disjuntos.
+El service worker de push es un archivo estático mínimo (sin framework) que
+vive en `apps/frontend/public/push/sw.js` (fuente de verdad, tracked; el
+build lo copia a `apps/api/src/public/`) y se sirve en `/push/sw.js` con
+scope `/push/`. El PWA se sirve plano desde la raíz — NO hay serving por
+locale (la rama i18n no está mergeada) — así que URL y scope son paths
+absolutos. Coexiste con `ngsw` (scope `/`) porque los scopes son disjuntos.
 
-- `apps/frontend/public/push/sw.js`:
-  - `push` event handler: parsea `event.data` JSON
-    (`{title, body, icon, url, data}` — contrato de `webpush.js`),
-    muestra `showNotification` con icono por defecto
-    `/icons/icon-192x192.png`.
-  - `notificationclick` event handler: cierra la notificación, abre/foca
-    el `url` del payload (o `/` si no hay).
+- Registro: `PushService.registerPush` registra `/push/sw.js` con scope
+  `/push/`; `SettingsPage` usa `navigator.serviceWorker.getRegistration('/push/')`.
+- Handlers:
+  - `push`: parsea `event.data` JSON (`{title, body, icon, image, url, data}`
+    — contrato de `webpush.js`) y muestra `showNotification` con `icon` del
+    payload (default `/icons/icon-192x192.png`, ícono pequeño de la app) e
+    `image: payload.image || undefined` (previsualización grande; solo
+    Android la renderiza, iOS la ignora). No existe `titleKey` ni i18n en el
+    contrato del payload.
+  - `notificationclick`: cierra la notificación y abre/foca `data.url`
+    **tal cual** (rutas absolutas de la app como `/?video=123` o URLs
+    externas de la cámara; `/` si no hay): foca una ventana existente o
+    abre una nueva.
 - Se sirve como cualquier asset estático (el `express.static` de
   `PUBLIC_DIR` lo cubre). No necesita ruta API.
 - **Status**: `[INTEG]` — verificado nativamente (200, contenido correcto).
-  Registro + push real pendiente en integración.
+  Push real contra FCM pendiente en integración.
 
 ### D28 (yi-api) — Timestamp de grabación real (`creation_time`), renombrado a `<ISO-timestamp>_<cámara>.mp4`, y eliminación opcional de la pista low-res
 
@@ -800,21 +860,23 @@ subida colisionaba → dos clips distintos terminaban en el mismo nombre.
   en hora **LOCAL** (coincide con el dashboard): p. ej.
   `2026-08-19T16-05-19_oficina.mp4`. Colisiones `_2`/`_3` con
   `while (fs.existsSync(finalPath))`.
-- **Dedup / re-trigger de chokidar**: el rename final ocurre DENTRO de
-  `RECORDINGS_DIR` (lo que vigila chokidar), así que chokidar dispara un `add`
-  sobre el nombre ya renombrado y `handleNewVideo` se ejecutaría una 2ª vez
-  (thumbnail/preview duplicados + violación `UNIQUE videos.original_path` al
-  reinsertar). Dos capas:
-  - `isOwnGeneratedFile()` / `OWN_FILENAME_PATTERN`: ignora cualquier basename
-    con nuestro formato generado (`YYYY-MM-DDTHH-MM-SS_cam[_N].mp4`); los crudos
-    de la cámara usan base-8 y nunca lo tienen. Cubre el `add` del rename final.
+- **Dedup / re-trigger de chokidar**: originalmente el rename final ocurría
+  DENTRO de `RECORDINGS_DIR` (lo que vigila chokidar), así que chokidar disparaba
+  un `add` sobre el nombre ya renombrado y `handleNewVideo` se ejecutaría una
+  2ª vez (thumbnail/preview duplicados + violación `UNIQUE videos.original_path`
+  al reinsertar). Resuelto con el split del backup 3-2-1: `INCOMING_DIR`
+  (staging FTP, lo ÚNICO que vigila chokidar) + `RECORDINGS_DIR` (procesados,
+  copia local). El rename mueve el clip FUERA de la carpeta vigilada (rename con
+  fallback cross-device `EXDEV`: copy + unlink), así el filtro por nombre
+  (`OWN_FILENAME_PATTERN`) se eliminó. Capa restante:
   - Set `processingFiles` (marcado al entrar en `handleNewVideo`, liberado a
     los 5 s): cubre los `change` intermedios durante remux/estabilidad.
-  - **TODO (futuro corto)**: desdoblar `RECORDINGS_DIR` en `incoming` (subida
-    FTP, lo único que vigila chokidar) + `recording` (procesados, listos para
-    archivar). El rename movería el clip fuera de la carpeta vigilada y el
-    filtro de nombre dejaría de ser necesario. Extra: `incoming` podría
-    mapearse a un ramdisk (tmpfs) para evitar la escritura temporal en disco.
+  - Placeholder anti-re-upload: tras mover el clip a `RECORDINGS_DIR` se deja
+    un archivo de 0 bytes con el nombre crudo original en `INCOMING_DIR` (la
+    cámara solo comprueba la existencia del nombre y nunca re-lee el
+    contenido); `handleNewVideo` ignora los archivos de 0 bytes al entrar.
+  - Extra: `incoming` puede mapearse a un ramdisk (tmpfs) para evitar la
+    escritura temporal en disco (volumen tmpfs comentado en docker-compose).
 - **Eliminación opcional de la pista low-res**: `removeLowResTrack()` elimina la
   pista de vídeo de baja resolución (640x360, stream 1) por stream copy
   (ffmpeg NO transcodifica). El clip tiene 3 streams: 0 = vídeo 1920x1080 H.264,
@@ -847,7 +909,11 @@ completo, y cachear los probes.
   por cámara. La pantalla de listado de cámaras lo usa.
 - **Caché de probes por cámara** en `camera/adapters/yi-hack.js` (mismo
   patrón que `dirsCache` del mismo adapter: `Map` + TTL, sin dependencias):
-  - TTL `CAMERA_STATUS_CACHE_TTL_MS` (env, default 30000; `0` desactiva).
+   - TTL `CAMERA_STATUS_CACHE_TTL_MS` (env, default 3600000 = 1 h; `0`
+     desactiva). La TTL larga es a propósito: es una **red de seguridad**, no
+     el mecanismo de frescura — la frescura la garantizan las invalidaciones
+     por eventos (abajo); la TTL solo acota el peor caso de una invalidación
+     perdida.
   - **Single-flight**: la caché guarda la `Promise` en vuelo (no el valor
     resuelto), así N peticiones concurrentes comparten un solo sondeo.
   - Clave: `cam.id`. Al expirar (o invalidarse), la siguiente llamada
@@ -872,12 +938,23 @@ completo, y cachear los probes.
     `command` (whitelist) y `group/power` (todas las del grupo)).
   - **`POST /cameras/:id/reboot`** (`adapter.reboot`; el reboot tumba el
     estado).
-  - **Borrados de SD** (`adapter.deleteEventDir` / `adapter.deleteEventFile`;
-    DELETE `/storage/files`, DELETE `/storage/dirs`, POST `/storage/purge`):
-    liberan espacio y cambian `free_sd` de `status.json`, que la caché sirve
-    a `GET /cameras/:id/storage` y a `buildCameraStatus`.
-  - NO se invalida en `reload` (cambia el registro, no el estado de la
-    cámara).
+   - **Borrados de SD** (`adapter.deleteEventDir` / `adapter.deleteEventFile`;
+     DELETE `/storage/files`, DELETE `/storage/dirs`, POST `/storage/purge`):
+     liberan espacio y cambian `free_sd` de `status.json`, que la caché sirve
+     a `GET /cameras/:id/storage` y a `buildCameraStatus`.
+   - **Transición MQTT offline→online** (evento `camera-online`, D7):
+     `server.js` llama a `invalidateProbes` cuando una cámara yi-hack vuelve a
+     estar online tras un reboot o recuperación de energía. Cubre reboots
+     manuales y ediciones externas de la config sin depender de topics no
+     documentados; es el momento en que la cámara aplica su config
+     (`FTP_UPLOAD`, etc.). NO se emite en el primer online tras el arranque
+     del NVR (la caché nace vacía: no hay nada que invalidar).
+   - **Clip indexado por FTP** (`sendClipNotification` en `ftp.js`, solo
+     yi-hack): evidencia directa de que la cámara sube clips — auto-sanación:
+     cualquier probe en caché que diga lo contrario está obsoleto (además
+     refresca lecturas de almacenamiento como `free_sd`).
+   - NO se invalida en `reload` (cambia el registro, no el estado de la
+     cámara).
 
 ### D30 (yi-api) — Acceso multi-ecosistema a cámaras: Adapter/Strategy por ecosistema + factory
 
@@ -927,6 +1004,44 @@ Adapter/Strategy por ecosistema + factory.
   `src/camera/adapters/<eco>.js` + un caso en la factory. El "contrato"
   entre adapters (qué métodos existen y su semántica) se documentará cuando
   aparezca el segundo adapter, no antes (YAGNI: hoy solo hay uno).
+
+### D31 (yi-api) — Dedup de Web Push vía caché de probes: eliminación del espejo `ftp-upload-state`
+
+El trigger de movimiento de Web Push (D15) decidía «¿esta cámara yi-hack sube
+clips por FTP?» leyendo un **espejo en memoria** (`push/ftp-upload-state.js`,
+~97 líneas): un `Map<cameraId, bool>` paralelo al dispositivo, que requería
+un seed en el arranque (`seedFromCamera()`, sondeo de fondo con cooldown de
+reintentos de 10 min) y 3 hooks manuales (escritura de la config FTP en
+`routes/storage.js`, evidencia de clip en `ftp.js`). Era estado paralelo que
+podía desincronizarse del `system.conf` real, y cada nueva fuente de cambio
+tenía que cablearse a mano.
+
+Rediseño (implementado): la decisión se lee directamente de la **caché de
+probes del adapter** — `yiHackAdapter.getSystemConfig(cam)` (D29/D30) — que ya
+existía para la página de estado:
+
+- **Fuente única**: la caché de probes es compartida entre la UI de estado y
+  el dedup de push. Sin espejo, sin seed, sin hooks manuales.
+- **Dos ramas** en `server.js` (`camera-motion`): generic o cámara ausente →
+  silencio (la notificación «Nuevo clip» la envía `ftp.js` al indexar);
+  yi-hack → `FTP_UPLOAD === 'yes'` → silencio; `'no'`, campo ausente o probe
+  fallido (`null`) → notificación inmediata con la URL de la página de
+  eventos de la cámara (`cameraEventsUrl`). Desaparece el caso «desconocido»:
+  un probe fallido se trata como «no sube por FTP» (default seguro). NUNCA
+  hay doble notificación.
+- **Frescura por invalidación, no por TTL**: la TTL de la caché sube de
+  30 s a 1 h (D29) porque cualquier cambio real invalida antes: escritura de
+  config vía API, `setViaCameraSettings`, borrados de SD, reboot, más dos
+  puntos nuevos — transición MQTT offline→online (`camera-online`, D7; cubre
+  reboots manuales y ediciones externas de la config) y clip indexado por FTP
+  (auto-sanación desde `ftp.js`). La TTL larga queda como red de seguridad
+  inofensiva.
+- **Single-flight** se conserva: varios movimientos simultáneos comparten un
+  solo probe (la caché guarda la promesa en vuelo).
+
+Borrado: `apps/api/src/push/ftp-upload-state.js` (módulo + los 3 hooks
+dispersos). Supersede la parte de «espejo FTP_UPLOAD» de D15; el resto de D15
+(VAPID, suscripciones, formato del payload, triggers) sigue en pie.
 
 ## Notas durante el desarrollo (live view)
 

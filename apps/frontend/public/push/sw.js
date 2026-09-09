@@ -1,14 +1,21 @@
 /**
- * push/sw.js — service worker mínimo de Web Push (scope /push/).
+ * push/sw.js — service worker mínimo de Web Push.
  *
- * Independiente de ngsw (scope /): el PWA registra los dos (ver
- * docs/ARCHITECTURE.md, D27). VIVE EN public/ para que el build de Angular
- * lo copie a la raíz de dist y Express lo sirva en /push/sw.js.
+ * El PWA se sirve plano desde la raíz (/), así que este SW se sirve en
+ * /push/sw.js (scope /push/). Independiente de ngsw (scope /): el PWA
+ * registra los dos (ver docs/ARCHITECTURE.md, D27). VIVE EN public/ para
+ * que el build de Angular lo copie a la raíz de dist y Express lo sirva en
+ * /push/sw.js.
  *
  * Contrato del payload (lo envía apps/api/src/push/webpush.js):
- *   JSON {title, body, icon, url, data}
+ *   JSON {title, body, icon, image, url, data}
+ * `icon` es el ícono pequeño de la app (o se usa el default); `image` es la
+ * previsualización grande (thumbnail del clip) que Android renderiza en la
+ * notificación (iOS la ignora). Al hacer clic se abre `data.url` tal cual.
  */
 /* global self */
+
+const ICON_URL = '/icons/icon-192x192.png';
 
 self.addEventListener('push', (event) => {
     let payload = {};
@@ -20,8 +27,9 @@ self.addEventListener('push', (event) => {
     event.waitUntil(
         self.registration.showNotification(payload.title || 'yi-nvr', {
             body: payload.body || '',
-            icon: payload.icon || '/icons/icon-192x192.png',
-            badge: '/icons/icon-192x192.png',
+            icon: payload.icon || ICON_URL,
+            image: payload.image || undefined,
+            badge: ICON_URL,
             data: { url: payload.url || '/' }
         })
     );

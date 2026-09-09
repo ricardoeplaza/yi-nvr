@@ -19,8 +19,10 @@
  *    timers con `.unref()` para no bloquear el shutdown).
  *
  * Formato del payload (decisión fase 4, ver docs/ARCHITECTURE.md):
- * JSON `{title, body, icon, url, data}` — el service worker del frontend
- * (fase 5) lo lee y construye la `Notification` del navegador.
+ * JSON `{title, body, icon, image, url, data}` — el service worker del
+ * frontend (fase 5) lo lee y construye la `Notification` del navegador.
+ * `icon` es el ícono pequeño de la app; `image` es la previsualización
+ * grande (thumbnail del clip) que Android renderiza en la notificación.
  *
  * Claves VAPID (SOLO en .env, nunca en git):
  *   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_CONTACT_EMAIL
@@ -121,11 +123,11 @@ function unsubscribe(endpoint) {
  * los cuenta. Sin claves VAPID → noop (debug log) para que el llamador no
  * tenga que distinguir el modo dev sin push.
  *
- * @param {{title: string, body: string, icon?: string, url?: string, data?: *}} notification
+ * @param {{title: string, body: string, icon?: string, image?: string, url?: string, data?: *}} notification
  * @returns {Promise<{delivered: number, failed: number, removed: number, noop?: boolean}>}
  */
 async function notify(notification) {
-    const { title, body, icon, url, data } = notification || {};
+    const { title, body, icon, image, url, data } = notification || {};
 
     if (!isConfigured()) {
         console.debug(`[Push] VAPID no configurado, notificando en modo noop: ${title}`);
@@ -138,7 +140,7 @@ async function notify(notification) {
         return summary;
     }
 
-    const payload = JSON.stringify({ title, body, icon, url, data });
+    const payload = JSON.stringify({ title, body, icon, image, url, data });
     const vapidDetails = {
         subject: process.env.VAPID_CONTACT_EMAIL,
         publicKey: process.env.VAPID_PUBLIC_KEY,

@@ -36,9 +36,16 @@
  *  - POST /api/cameras/:id/storage/ftp - Escribir config push FTP
  *
  * Web Push (fase 4): los triggers son el evento `camera-motion` del cliente
- * MQTT (notify inmediato, salvo que el push de esa cámara esté desactivado
- * en camera_settings) y el clip indexado en ftp.js. Sin claves VAPID el
- * módulo push funciona en modo noop (no envía, no falla).
+ * MQTT y el clip indexado en ftp.js. Si la cámara sube clips por FTP, el
+ * movimiento NO notifica: la notificación "Nuevo clip" la envía ftp.js al
+ * indexar el clip (con thumbnail y deep-link al dashboard). ¿Sube por FTP? Se
+ * decide leyendo el system.conf de la caché de probes del adapter yi-hack
+ * (getSystemConfig, single-flight, TTL 1 h; invalidada por eventos: escritura
+ * de config vía API, reboot offline→online, clip indexado): si FTP_UPLOAD=yes,
+ * silencio; en cualquier otro caso ('no', campo ausente o probe fallido) se
+ * notifica en el acto enlazando a la página de eventos de la propia cámara
+ * yi-hack. NUNCA hay doble notificación. Sin claves VAPID el módulo push
+ * funciona en modo noop (no envía, no falla).
  *
  * Proxy go2rtc (live view):
  *  - /stream-proxy/* → GO2RTC_URL (env, default http://go2rtc:1984)
@@ -84,6 +91,7 @@ const streamRouter = require('./routes/stream');
 const pushRouter = require('./routes/push');
 const storageRouter = require('./routes/storage');
 const webpush = require('./push/webpush');
+const yiHackAdapter = require('./camera/adapters/yi-hack');
 const cameraRegistry = require('./camera-registry');
 const { getCameraSetting } = require('./database');
 
@@ -173,10 +181,36 @@ app.use('/api', storageRouter);
 // ============================================
 
 // Escuchamos el bus del cliente MQTT (NO acoplado dentro de mqtt/client.js):
-// cada evento de movimiento dispara una notificación push inmediata.
-// notify() es a prueba de fallos (no lanza), pero lo envolvemos igualmente
-// para que ningún error de este handler tume el pipeline de eventos.
-mqttClient.mqttEvents.on('camera-motion', ({ cameraId, eventType }) => {
+// cada evento de movimiento decide entre notificar en el acto o quedarse en
+// silencio (si la cámara sube por FTP, la notificación "Nuevo clip" la envía
+// ftp.js al indexar el clip). notify() es a prueba de fallos (no lanza), pero
+// lo envolvemos igualmente para que ningún error de este handler tume el
+// pipeline de eventos.
+//
+// La decisión "¿la cámara sube clips por FTP?" se lee del system.conf de la
+// caché de probes del adapter yi-hack (getSystemConfig: single-flight, TTL 1 h;
+// invalidada por escritura de config vía API, reboot offline→online y clip
+// indexado). NUNCA hay doble notificación: si FTP_UPLOAD=yes la cámara sube el
+// clip y ftp.js notifica al indexarlo; en cualquier otro caso ('no', campo
+// ausente o probe fallido — cámara offline/unreachable) se notifica en el acto
+// (default seguro). generic: silencio por definición (el NVR solo indexa por
+// FTP y la notificación "Nuevo clip" la envía ftp.js).
+//
+// Página de eventos de la cámara yi-hack: lista los clips de la hora indicada.
+// dirname con el formato de directorios de la cámara (p. ej. 2026Y09M09D08H),
+// hora local del servidor truncada a la hora (asume cámara y NVR en misma zona
+// horaria). Sin `host` en la cámara, fallback a la página de la cámara.
+function cameraEventsUrl(camera, cameraId) {
+    if (!camera || !camera.host) {
+        return `/cameras/${cameraId}`;
+    }
+    const now = new Date();
+    const p2 = (n) => String(n).padStart(2, '0');
+    const dirname = `${now.getFullYear()}Y${p2(now.getMonth() + 1)}M${p2(now.getDate())}D${p2(now.getHours())}H`;
+    return `http://${camera.host}/index.html?page=eventsfile&dirname=${dirname}`;
+}
+
+mqttClient.mqttEvents.on('camera-motion', async ({ cameraId, eventType }) => {
     try {
         // Toggle de push por cámara (camera_settings; default: activado)
         if (!getCameraSetting(cameraId).push_enabled) {
@@ -184,14 +218,51 @@ mqttClient.mqttEvents.on('camera-motion', ({ cameraId, eventType }) => {
         }
         const camera = cameraRegistry.getCameraById(cameraId);
         const cameraName = camera ? camera.name : cameraId;
-        console.log(`[Push] Movimiento de ${cameraId} (${eventType}), notificando`);
-        webpush.notify({
-            title: 'Movimiento',
-            body: cameraName,
-            url: `/cameras/${cameraId}`
-        });
+
+        // generic o cámara no encontrada: silencio. El NVR solo indexa por FTP
+        // (no hay dispositivo que consultar) y la notificación "Nuevo clip"
+        // la envía ftp.js al indexar.
+        if (!camera || cameraRegistry.getEcosystem(camera) !== 'yi-hack') {
+            console.log(`[Push] Movimiento de ${cameraId} (${eventType}), pendiente de clip`);
+            return;
+        }
+
+        // yi-hack: ¿la cámara sube clips por FTP? Se lee el system.conf de la
+        // caché de probes del adapter (single-flight, TTL 1 h; nunca se hace
+        // fetch "frío" si hay probe reciente).
+        const sys = await yiHackAdapter.getSystemConfig(camera);
+        if (sys && sys.FTP_UPLOAD === 'yes') {
+            // La cámara sube por FTP: silencio aquí. La notificación "Nuevo
+            // clip" la envía ftp.js al indexar el clip (con thumbnail).
+            console.log(`[Push] Movimiento de ${cameraId} (${eventType}), pendiente de clip`);
+        } else {
+            // Sin subida por FTP ('no', campo ausente o probe fallido —
+            // cámara offline/unreachable): no llegará clip por FTP,
+            // notificación inmediata (default seguro).
+            console.log(`[Push] Movimiento de ${cameraId} (${eventType}), notificando (sin subida FTP)`);
+            webpush.notify({
+                title: 'Movimiento',
+                body: cameraName,
+                url: cameraEventsUrl(camera, cameraId)
+            });
+        }
     } catch (e) {
         console.error('[Push] Error en el trigger de movimiento:', e.message);
+    }
+});
+
+// Reboot/recuperación: cuando una cámara yi-hack vuelve a estar online
+// (offline→online MQTT), la caché de probes puede tener estado envejecido y
+// es el momento en que la cámara aplica su config: invalidamos para que la
+// próxima lectura (p. ej. un movimiento) sondee el system.conf de nuevo.
+mqttClient.mqttEvents.on('camera-online', ({ cameraId }) => {
+    try {
+        const camera = cameraRegistry.getCameraById(cameraId);
+        if (!camera || cameraRegistry.getEcosystem(camera) !== 'yi-hack') return;
+        yiHackAdapter.invalidateProbes(camera);
+        console.log(`[Push] ${cameraId} online tras reboot: probes invalidados`);
+    } catch (e) {
+        console.error('[Push] Error invalidando probes (camera-online):', e.message);
     }
 });
 

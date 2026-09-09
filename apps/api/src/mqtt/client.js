@@ -9,10 +9,11 @@
  *    (JPEGs pesados; el tema existe y está documentado en topics.js).
  *  - Normalización de eventos (topics.matchEvent) y persistencia en la
  *    tabla `mqtt_events` (database.js).
- *  - Emisión de `camera-motion` en el EventEmitter exportado
- *    (`mqttEvents`) para motion_start/ai_human/ai_vehicle/ai_animal.
- *    Una fase futura se suscribirá para notificaciones push; este módulo
- *    NO acopla nada de push.
+ *  - Emisión de eventos en el EventEmitter exportado (`mqttEvents`):
+ *    `camera-motion` (para motion_start/ai_human/ai_vehicle/ai_animal) y
+ *    `camera-online` (transición offline→online de una cámara, p. ej. tras
+ *    un reboot o recuperación de energía). Una fase futura se suscribirá
+ *    para notificaciones push; este módulo NO acopla nada de push.
  *
  * Degradación elegante (OBLIGATORIA para dev sin broker):
  *  - Si `MQTT_BROKER_URL` está vacío, el cliente no se inicia (warning).
@@ -86,17 +87,32 @@ const cameraCommandState = new Map();
 
 /**
  * Actualiza el estado MQTT de una cámara a partir de un mensaje recibido.
+ * Emite `camera-online` en el bus `mqttEvents` (payload `{ cameraId }`)
+ * cuando la cámara hace la transición offline→online: es el momento en que
+ * se aplica la config de la cámara (p. ej. FTP_UPLOAD) y la caché de probes
+ * del adapter puede contener probes fallidos envejecidos. NO se emite en
+ * el primer mensaje online tras el arranque del NVR (sin entrada previa:
+ * la caché nace vacía y no hay nada que invalidar).
  * @param {string} cameraId
  * @param {string} eventType
  * @param {string} payload
  * @param {string} receivedAt
  */
 function trackMqttState(cameraId, eventType, payload, receivedAt) {
-    const entry = cameraMqttState.get(cameraId) || { online: false, lastSeen: null };
+    const prev = cameraMqttState.get(cameraId) || null;
+    const entry = prev || { online: false, lastSeen: null };
     entry.lastSeen = receivedAt;
     if (eventType === 'online') entry.online = true;
     else if (eventType === 'offline') entry.online = false;
     cameraMqttState.set(cameraId, entry);
+
+    // Transición offline→online (reboot o recuperación de energía): la
+    // caché de probes del adapter puede contener probes fallidos
+    // envejecidos y es el momento de aplicar la config de la cámara.
+    if (prev && prev.online === false && eventType === 'online') {
+        console.log(`[MQTT] ${cameraId} transición offline→online (reboot/recuperación)`);
+        mqttEvents.emit('camera-online', { cameraId });
+    }
 
     if (eventType.startsWith('stat:')) {
         const cmd = eventType.slice('stat:'.length);
