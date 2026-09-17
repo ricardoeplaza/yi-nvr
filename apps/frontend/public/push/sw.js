@@ -18,16 +18,19 @@
 const ICON_URL = '/icons/icon-192x192.png';
 
 // Títulos generados por el backend (apps/api/src/ftp.js y server.js) en
-// español. Se traducen aquí según el idioma del navegador — mismo criterio
-// de detección que la app (navigator.language, sin persistencia).
+// español. Se traducen aquí según self.navigator.language — mismo criterio
+// de detección que la app: prefijo de 2 letras, inglés por defecto. El
+// contrato del payload no cambia.
 const TITLE_I18N = {
-    'Movimiento': 'Motion',
-    'Nuevo clip': 'New clip'
+    'Movimiento': { es: 'Movimiento', en: 'Motion', fr: 'Mouvement', de: 'Bewegung', pt: 'Movimento', it: 'Movimento' },
+    'Nuevo clip': { es: 'Nuevo clip', en: 'New clip', fr: 'Nouveau clip', de: 'Neuer Clip', pt: 'Novo clipe', it: 'Nuovo clip' }
 };
 
 function translateTitle(title) {
-    const lang = (self.navigator.language || 'es').toLowerCase();
-    return lang.startsWith('en') ? (TITLE_I18N[title] ?? title) : title;
+    const prefix = (self.navigator.language || 'en').toLowerCase().split('-')[0];
+    const entry = TITLE_I18N[title];
+    if (!entry) return title;
+    return entry[prefix] ?? entry.en;
 }
 
 self.addEventListener('push', (event) => {
