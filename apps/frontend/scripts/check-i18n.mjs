@@ -5,10 +5,11 @@
  * Run from apps/frontend:  node scripts/check-i18n.mjs
  *
  * Checks:
- *   1. keys.ts (es) and en.json have the same key set.
- *   2. For every key, {{param}} names match between es and en.
- *   3. Every i18n key used in src/app (all .ts/.html files) + src/index.html
- *      is defined in keys.ts (FAIL otherwise). Defined-but-unused keys are WARN.
+ *   1. es.json is the base dictionary (source language). Every other *.json in
+ *      src/i18n/ must have the identical key set and the same key order, and
+ *      for every key the {{param}} names must match es.json's.
+ *   2. Every i18n key used in src/app (all .ts/.html files) + src/index.html
+ *      is defined in es.json (FAIL otherwise). Defined-but-unused keys are WARN.
  *
  * Usage detection (two passes):
  *   - call usages:  t('key')            → regex /(?:^|[^\w])t\(\s*'([^']+)'/g
@@ -39,46 +40,63 @@ const warn = (msg) => warnings.push(msg);
 // 1. Parse data files
 // ---------------------------------------------------------------------------
 
-/** keys.ts entries: one per line, `'key': 'value',` */
-const keysTsRaw = readFileSync(join(SRC, 'i18n', 'keys.ts'), 'utf8');
-const esTemplates = {};
-{
-  const entryRe = /^\s*'([^']+)'\s*:\s*'([^']*)',?\s*$/;
-  for (const line of keysTsRaw.split(/\r?\n/)) {
-    const m = entryRe.exec(line);
-    if (!m) continue;
-    if (m[1] in esTemplates) fail(`keys.ts: duplicate key '${m[1]}'`);
-    esTemplates[m[1]] = m[2];
+const I18N_DIR = join(SRC, 'i18n');
+
+/** Load a flat {key: template} JSON locale file. */
+function loadLocale(file) {
+  const templates = {};
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8'));
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof v !== 'string') fail(`${file}: value for '${k}' is not a string`);
+      templates[k] = String(v);
+    }
+  } catch (e) {
+    fail(`${file}: parse error: ${e.message}`);
+  }
+  return templates;
+}
+
+/** Base dictionary: es.json (source language). */
+const esTemplates = loadLocale(join(I18N_DIR, 'es.json'));
+const esKeysArr = Object.keys(esTemplates);
+const esKeys = new Set(esKeysArr);
+
+/** Every other locale in src/i18n/ (name without .json → templates). */
+const locales = {};
+for (const f of readdirSync(I18N_DIR)
+  .filter((f) => f.endsWith('.json') && f !== 'es.json')
+  .sort()) {
+  locales[f.replace(/\.json$/, '')] = loadLocale(join(I18N_DIR, f));
+}
+
+// ---------------------------------------------------------------------------
+// 2. Key-set / order diff per locale
+// ---------------------------------------------------------------------------
+
+for (const [name, templates] of Object.entries(locales)) {
+  const file = `${name}.json`;
+  const keysArr = Object.keys(templates);
+  const keySet = new Set(keysArr);
+  for (const k of [...esKeys].sort()) {
+    if (!keySet.has(k)) fail(`key defined in es.json but missing from ${file}: '${k}'`);
+  }
+  for (const k of [...keySet].sort()) {
+    if (!esKeys.has(k)) fail(`key defined in ${file} but missing from es.json: '${k}'`);
+  }
+  // Order check only makes sense when the key sets are identical.
+  if (keysArr.length === esKeysArr.length && [...esKeys].every((k) => keySet.has(k))) {
+    for (let i = 0; i < esKeysArr.length; i++) {
+      if (esKeysArr[i] !== keysArr[i]) {
+        fail(`key order differs from es.json in ${file} at index ${i}: '${keysArr[i]}' (expected '${esKeysArr[i]}')`);
+        break;
+      }
+    }
   }
 }
 
-/** en.json: flat {key: englishTemplate} */
-let enTemplates = {};
-try {
-  const parsed = JSON.parse(readFileSync(join(SRC, 'i18n', 'en.json'), 'utf8'));
-  for (const [k, v] of Object.entries(parsed)) {
-    if (typeof v !== 'string') fail(`en.json: value for '${k}' is not a string`);
-    enTemplates[k] = String(v);
-  }
-} catch (e) {
-  fail(`en.json: parse error: ${e.message}`);
-}
-
 // ---------------------------------------------------------------------------
-// 2. Key-set diff
-// ---------------------------------------------------------------------------
-
-const esKeys = new Set(Object.keys(esTemplates));
-const enKeys = new Set(Object.keys(enTemplates));
-for (const k of [...esKeys].sort()) {
-  if (!enKeys.has(k)) fail(`key defined in keys.ts but missing from en.json: '${k}'`);
-}
-for (const k of [...enKeys].sort()) {
-  if (!esKeys.has(k)) fail(`key defined in en.json but missing from keys.ts: '${k}'`);
-}
-
-// ---------------------------------------------------------------------------
-// 3. {{param}} diff per key
+// 3. {{param}} diff per key, per locale
 // ---------------------------------------------------------------------------
 
 const paramsOf = (s) => {
@@ -86,11 +104,13 @@ const paramsOf = (s) => {
   for (const m of s.matchAll(/\{\{(\w+)\}\}/g)) set.add(m[1]);
   return set;
 };
-for (const k of [...esKeys].filter((k) => enKeys.has(k)).sort()) {
-  const pe = paramsOf(esTemplates[k]);
-  const pn = paramsOf(enTemplates[k]);
-  if (pe.size !== pn.size || [...pe].some((p) => !pn.has(p))) {
-    fail(`param mismatch for '${k}': es=[${[...pe].join(', ')}] en=[${[...pn].join(', ')}]`);
+for (const [name, templates] of Object.entries(locales)) {
+  for (const k of [...esKeys].filter((k) => k in templates).sort()) {
+    const pe = paramsOf(esTemplates[k]);
+    const pn = paramsOf(templates[k]);
+    if (pe.size !== pn.size || [...pe].some((p) => !pn.has(p))) {
+      fail(`param mismatch for '${k}': es=[${[...pe].join(', ')}] ${name}=[${[...pn].join(', ')}]`);
+    }
   }
 }
 
@@ -296,7 +316,7 @@ const missing = [...used.entries()]
   .filter(([key]) => !esKeys.has(key))
   .sort((a, b) => a[0].localeCompare(b[0]));
 for (const [key, locs] of missing) {
-  fail(`used but NOT defined in keys.ts: '${key}' (${[...locs].sort().join(', ')})`);
+  fail(`used but NOT defined in es.json: '${key}' (${[...locs].sort().join(', ')})`);
 }
 
 const unused = [...esKeys]
@@ -307,9 +327,15 @@ if (unused.length > 0) {
 }
 
 const totalKeys = esKeys.size;
+const localeCounts = [
+  ['es.json (base)', totalKeys],
+  ...Object.entries(locales).map(([n, t]) => [`${n}.json`, Object.keys(t).length]),
+];
+const labelW = Math.max(...localeCounts.map(([l]) => l.length));
 console.log('i18n check');
-console.log(`  keys.ts entries        : ${totalKeys}`);
-console.log(`  en.json entries        : ${enKeys.size}`);
+for (const [label, count] of localeCounts) {
+  console.log(`  ${label.padEnd(labelW)} : ${count} entries`);
+}
 console.log(`  files scanned          : ${files.length}`);
 console.log(`  used keys              : ${used.size} / ${totalKeys}`);
 console.log(`  unused keys (warn)     : ${unused.length}`);
