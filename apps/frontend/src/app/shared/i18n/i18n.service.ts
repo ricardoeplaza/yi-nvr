@@ -4,6 +4,7 @@ import esMessages from '../../../i18n/es.json';
 import enMessages from '../../../i18n/en.json';
 import frMessages from '../../../i18n/fr.json';
 import deMessages from '../../../i18n/de.json';
+import ptMessages from '../../../i18n/pt.json';
 
 /** Locales the app supports. Product decision: these 6, even though only
  *  es/en JSON files exist so far (fr/de/pt/it land in later commits). */
@@ -16,6 +17,7 @@ const MESSAGES: Partial<Record<Locale, Record<string, string>>> = {
   en: enMessages,
   fr: frMessages,
   de: deMessages,
+  pt: ptMessages,
 };
 
 /**
