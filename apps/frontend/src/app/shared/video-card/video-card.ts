@@ -2,11 +2,12 @@ import { Component, input } from '@angular/core';
 import { Video } from '../../models/video.model';
 import { FormatDatePipe } from '../format-date.pipe';
 import { FormatDurationPipe } from '../format-duration.pipe';
+import { TranslatePipe } from '../i18n/translate.pipe';
 
 @Component({
   selector: 'yi-video-card',
   standalone: true,
-  imports: [FormatDatePipe, FormatDurationPipe],
+  imports: [FormatDatePipe, FormatDurationPipe, TranslatePipe],
   template: `
     <div class="video-card">
       <img class="video-thumb" [src]="video().thumbnail_url" alt="" />
@@ -20,7 +21,7 @@ import { FormatDurationPipe } from '../format-duration.pipe';
           <span class="video-size">{{ formatSize(video().file_size) }}</span>
         }
         @if (onDelete()) {
-          <button class="video-delete" type="button" (click)="onDelete()!()" aria-label="Eliminar">🗑</button>
+          <button class="video-delete" type="button" (click)="onDelete()!()" [attr.aria-label]="'common.selection.delete' | t">🗑</button>
         }
       </div>
     </div>

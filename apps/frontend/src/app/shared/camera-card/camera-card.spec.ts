@@ -4,6 +4,22 @@ import { provideRouter, Router } from '@angular/router';
 
 import { CameraCard } from './camera-card';
 import { Camera, CameraStatus } from '../../models/camera.model';
+import { I18nService } from '../i18n/i18n.service';
+import { I18N_KEYS } from '../../../i18n/keys';
+
+// Stub en español: las aserciones de este spec esperan el texto en español.
+const i18nStub = {
+  lang: 'es' as const,
+  t: (key: string, params?: Record<string, string | number>) =>
+    String(I18N_KEYS[key as keyof typeof I18N_KEYS]).replace(
+      /\{\{(\w+)\}\}/g,
+      (_m, name: string) => String(params?.[name] ?? ''),
+    ),
+  translateApiError: (err: unknown) => {
+    const e = err as { error?: { error?: string }; message?: string } | null;
+    return e?.error?.error || e?.message || 'Error desconocido';
+  },
+};
 
 function makeCamera(extra: Partial<Camera> = {}): Camera {
   return {
@@ -81,7 +97,7 @@ describe('CameraCard', () => {
   async function createHost() {
     await TestBed.configureTestingModule({
       imports: [HostComponent],
-      providers: [provideRouter([])],
+      providers: [provideRouter([]), { provide: I18nService, useValue: i18nStub }],
     }).compileComponents();
     const fixture = TestBed.createComponent(HostComponent);
     fixture.detectChanges();

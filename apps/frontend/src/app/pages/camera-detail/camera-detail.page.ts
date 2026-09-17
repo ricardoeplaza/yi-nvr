@@ -5,6 +5,8 @@ import { StreamService } from '../../services/stream.service';
 import { Camera, CameraStatus } from '../../models/camera.model';
 import { Player, PlayerLiveStatus } from '../../shared/player/player';
 import { FormatDatePipe } from '../../shared/format-date.pipe';
+import { I18nService } from '../../shared/i18n/i18n.service';
+import { TranslatePipe } from '../../shared/i18n/translate.pipe';
 import { AppBack } from '../../shared/app-back/app-back';
 
 const STATUS_POLL_MS = 30000;
@@ -12,7 +14,7 @@ const STATUS_POLL_MS = 30000;
 @Component({
   selector: 'yi-camera-detail-page',
   standalone: true,
-  imports: [Player, FormatDatePipe, RouterLink, AppBack],
+  imports: [Player, FormatDatePipe, RouterLink, AppBack, TranslatePipe],
   template: `
     <div class="cam-detail">
       <yi-app-back [to]="['/cameras']" />
@@ -26,9 +28,9 @@ const STATUS_POLL_MS = 30000;
         ></yi-player>
 
         @if (liveStatus() === 'loading') {
-          <p class="live-status">Cargando…</p>
+          <p class="live-status">{{ 'common.loading' | t }}</p>
         } @else if (liveStatus() === 'error') {
-          <p class="live-status error">Error de stream</p>
+          <p class="live-status error">{{ 'cameraDetail.streamError' | t }}</p>
         }
       </div>
 
@@ -41,7 +43,7 @@ const STATUS_POLL_MS = 30000;
             <span class="state-dot"></span>
             <span>{{ stateLabel() }}</span>
             @if (status()!.http === false && status()!.state === 'on') {
-              <span class="state-sub">HTTP de la cámara caído · estado por MQTT</span>
+              <span class="state-sub">{{ 'cameraDetail.httpDownStatusViaMqtt' | t }}</span>
             }
           </div>
         }
@@ -49,11 +51,11 @@ const STATUS_POLL_MS = 30000;
         @if (status()?.capabilities.sd) {
           <div class="sd-section">
             <div class="sd-header">
-              <span class="sd-label">Tarjeta SD</span>
+              <span class="sd-label">{{ 'common.sdCard' | t }}</span>
               @if (status()?.sd) {
                 <span class="sd-value">{{ formatMb(status()!.sd!.used_mb) }} / {{ formatMb(status()!.sd!.total_mb) }}</span>
               } @else {
-                <span class="sd-value dim">No disponible</span>
+                <span class="sd-value dim">{{ 'cameraDetail.notAvailable' | t }}</span>
               }
             </div>
             @if (status()?.sd) {
@@ -62,14 +64,14 @@ const STATUS_POLL_MS = 30000;
               </div>
             }
             <a class="sd-manage" [routerLink]="['/cameras', camera()!.id, 'storage']">
-              Gestionar almacenamiento
+              {{ 'cameraDetail.manageStorage' | t }}
             </a>
           </div>
         }
 
         @if (status()?.capabilities.controls || status()?.capabilities.push) {
           <div class="controls-section">
-            <h2>Controles</h2>
+            <h2>{{ 'cameraDetail.controls' | t }}</h2>
             @if (actionError()) {
               <p class="action-error">{{ actionError() }}</p>
             }
@@ -77,50 +79,50 @@ const STATUS_POLL_MS = 30000;
               @if (status()?.capabilities.controls) {
                 @if (camera()!.capabilities.power) {
                   <button class="toggle-btn" [class.active]="powerOn()" (click)="togglePower()">
-                    <span class="toggle-label">Encendido</span>
+                    <span class="toggle-label">{{ 'cameraDetail.power' | t }}</span>
                     <span class="toggle-state">{{ powerOn() ? 'ON' : 'OFF' }}</span>
                   </button>
                 }
                 @if (camera()!.capabilities.led) {
                   <button class="toggle-btn" [class.active]="ledOn()" (click)="toggleLed()">
-                    <span class="toggle-label">LED</span>
+                    <span class="toggle-label">{{ 'cameraDetail.led' | t }}</span>
                     <span class="toggle-state">{{ ledOn() ? 'ON' : 'OFF' }}</span>
                   </button>
                 }
                 @if (camera()!.capabilities.ircut) {
                   <button class="toggle-btn" [class.active]="nightVision()" (click)="toggleNightVision()">
-                    <span class="toggle-label">Visión nocturna</span>
+                    <span class="toggle-label">{{ 'cameraDetail.nightVision' | t }}</span>
                     <span class="toggle-state">{{ nightVision() ? 'ON' : 'OFF' }}</span>
                   </button>
                 }
                 @if (camera()!.capabilities.rec_mode) {
                   <button class="toggle-btn active" (click)="toggleRecMode()">
-                    <span class="toggle-label">Grabación</span>
-                    <span class="toggle-state">{{ recMode() === 'motion' ? 'Movimiento' : 'Continua' }}</span>
+                    <span class="toggle-label">{{ 'common.recording' | t }}</span>
+                    <span class="toggle-state">{{ (recMode() === 'motion' ? 'common.motion' : 'cameraDetail.continuous') | t }}</span>
                   </button>
                 }
               }
               @if (status()?.capabilities.push) {
                 <button class="toggle-btn" [class.active]="pushEnabled()" (click)="togglePush()">
-                  <span class="toggle-label">Notificación de movimiento</span>
+                  <span class="toggle-label">{{ 'cameraDetail.motionNotification' | t }}</span>
                   <span class="toggle-state">{{ pushEnabled() ? 'ON' : 'OFF' }}</span>
                 </button>
               }
                @if (status()?.capabilities.controls) {
                  <button class="toggle-btn" [class.active]="sdRecording()" (click)="toggleSdRecording()">
-                   <span class="toggle-label">Guardado en SD*</span>
+                   <span class="toggle-label">{{ 'cameraDetail.saveToSd' | t }}</span>
                    <span class="toggle-state">{{ sdRecording() ? 'ON' : 'OFF' }}</span>
                  </button>
                  <button class="danger-btn" [disabled]="status()?.http === false" (click)="rebootCamera()">
-                   Reiniciar cámara
+                   {{ 'common.restartCamera' | t }}
                  </button>
                }
             </div>
             @if (status()?.capabilities.controls) {
               <p class="section-note">
-                «Guardado en SD»* requiere reinicio de la cámara para aplicarse; los demás controles son inmediatos.
+                {{ 'cameraDetail.saveToSdNote' | t }}
                 @if (status()?.http === false) {
-                  «Reiniciar cámara» requiere el httpd de la cámara (ahora mismo no disponible).
+                  {{ 'cameraDetail.restartNeedsHttpd' | t }}
                 }
               </p>
             }
@@ -128,30 +130,30 @@ const STATUS_POLL_MS = 30000;
         }
 
         <div class="cam-info-section">
-          <h2>Información</h2>
+          <h2>{{ 'cameraDetail.info' | t }}</h2>
           <div class="info-grid">
-            <div class="info-row"><span class="info-label">Host</span><span class="info-value">{{ camera()!.host }}</span></div>
-            <div class="info-row"><span class="info-label">Videos</span><span class="info-value">{{ camera()!.video_count }}</span></div>
+            <div class="info-row"><span class="info-label">{{ 'cameraDetail.host' | t }}</span><span class="info-value">{{ camera()!.host }}</span></div>
+            <div class="info-row"><span class="info-label">{{ 'cameraDetail.videos' | t }}</span><span class="info-value">{{ camera()!.video_count }}</span></div>
             @if (camera()!.last_video) {
-              <div class="info-row"><span class="info-label">Último video</span><span class="info-value">{{ camera()!.last_video | formatDate }}</span></div>
+              <div class="info-row"><span class="info-label">{{ 'cameraDetail.lastVideo' | t }}</span><span class="info-value">{{ camera()!.last_video | formatDate }}</span></div>
             }
             @if (status()?.capabilities.system) {
-              <div class="info-row"><span class="info-label">Firmware</span><span class="info-value">{{ status()?.status?.fw_version || 'No disponible' }}</span></div>
-              <div class="info-row"><span class="info-label">Uptime</span><span class="info-value">{{ status()?.status?.uptime ? formatUptime(status()!.status!.uptime) : 'No disponible' }}</span></div>
+              <div class="info-row"><span class="info-label">{{ 'cameraDetail.firmware' | t }}</span><span class="info-value">{{ status()?.status?.fw_version || ('cameraDetail.notAvailable' | t) }}</span></div>
+              <div class="info-row"><span class="info-label">{{ 'cameraDetail.uptime' | t }}</span><span class="info-value">{{ status()?.status?.uptime ? formatUptime(status()!.status!.uptime) : ('cameraDetail.notAvailable' | t) }}</span></div>
             }
             @if (status()?.capabilities.live_status) {
-              <div class="info-row"><span class="info-label">IP</span><span class="info-value">{{ status()?.status?.local_ip || 'No disponible' }}</span></div>
-              <div class="info-row"><span class="info-label">MAC</span><span class="info-value">{{ status()?.status?.mac_addr || 'No disponible' }}</span></div>
-              <div class="info-row"><span class="info-label">Serie</span><span class="info-value">{{ status()?.status?.serial_number || 'No disponible' }}</span></div>
+              <div class="info-row"><span class="info-label">{{ 'cameraDetail.ip' | t }}</span><span class="info-value">{{ status()?.status?.local_ip || ('cameraDetail.notAvailable' | t) }}</span></div>
+              <div class="info-row"><span class="info-label">{{ 'cameraDetail.mac' | t }}</span><span class="info-value">{{ status()?.status?.mac_addr || ('cameraDetail.notAvailable' | t) }}</span></div>
+              <div class="info-row"><span class="info-label">{{ 'cameraDetail.serial' | t }}</span><span class="info-value">{{ status()?.status?.serial_number || ('cameraDetail.notAvailable' | t) }}</span></div>
             }
             @if (status()?.capabilities.wifi) {
-              <div class="info-row"><span class="info-label">WiFi</span><span class="info-value">{{ wifiValue() }}</span></div>
+              <div class="info-row"><span class="info-label">{{ 'cameraDetail.wifi' | t }}</span><span class="info-value">{{ wifiValue() }}</span></div>
             }
             @if (status()?.last_event) {
-              <div class="info-row"><span class="info-label">Último evento</span><span class="info-value">{{ status()!.last_event!.event_type }} · {{ status()!.last_event!.received_at | formatDate }}</span></div>
+              <div class="info-row"><span class="info-label">{{ 'cameraDetail.lastEvent' | t }}</span><span class="info-value">{{ status()!.last_event!.event_type }} · {{ status()!.last_event!.received_at | formatDate }}</span></div>
             }
             @if (status()?.last_motion) {
-              <div class="info-row"><span class="info-label">Último movimiento</span><span class="info-value">{{ status()!.last_motion!.received_at | formatDate }}</span></div>
+              <div class="info-row"><span class="info-label">{{ 'cameraDetail.lastMotion' | t }}</span><span class="info-value">{{ status()!.last_motion!.received_at | formatDate }}</span></div>
             }
           </div>
         </div>
@@ -165,6 +167,7 @@ export class CameraDetailPage implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private cameraService = inject(CameraService);
   private streamService = inject(StreamService);
+  private i18n = inject(I18nService);
 
   camera = signal<Camera | null>(null);
   status = signal<CameraStatus | null>(null);
@@ -250,9 +253,9 @@ export class CameraDetailPage implements OnInit, OnDestroy {
 
   stateLabel(): string {
     switch (this.status()?.state) {
-      case 'on': return 'En línea';
-      case 'off': return 'Apagada';
-      case 'unreachable': return 'Sin conexión';
+      case 'on': return this.i18n.t('cameraDetail.stateOnline');
+      case 'off': return this.i18n.t('cameraDetail.stateOff');
+      case 'unreachable': return this.i18n.t('cameraDetail.stateUnreachable');
       default: return '…';
     }
   }
@@ -268,7 +271,7 @@ export class CameraDetailPage implements OnInit, OnDestroy {
 
   wifiValue(): string {
     const st = this.status()?.status;
-    return st?.wlan_essid ? `${st.wlan_essid} (${st.wlan_strength} dBm)` : 'No disponible';
+    return st?.wlan_essid ? `${st.wlan_essid} (${st.wlan_strength} dBm)` : this.i18n.t('cameraDetail.notAvailable');
   }
 
   formatUptime(uptime?: string | number): string {
@@ -285,7 +288,7 @@ export class CameraDetailPage implements OnInit, OnDestroy {
   // fallo de red, el mensaje del HttpClient.
   private extractError(err: unknown): string {
     const e = err as { error?: { error?: string }; message?: string };
-    return e?.error?.error || e?.message || 'Error desconocido';
+    return e?.error?.error || e?.message || this.i18n.t('common.errorUnknown');
   }
 
   togglePower() {
@@ -361,7 +364,7 @@ export class CameraDetailPage implements OnInit, OnDestroy {
   }
 
   rebootCamera() {
-    if (!window.confirm('¿Reiniciar la cámara? Perderás la conexión en unos segundos.')) {
+    if (!window.confirm(this.i18n.t('common.restartConfirm'))) {
       return;
     }
     this.cameraService.rebootCamera(this.cameraId).subscribe({

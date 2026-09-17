@@ -44,9 +44,9 @@
           <p class="cam-status">
             <span class="dot-rec"></span>
             @if (liveUrl()) {
-              EN VIVO
+              {{ 'player.live' | t }}
             } @else {
-              Grabación&nbsp;|&nbsp;{{ clipLabel() }}
+              {{ 'player.recordingLabel' | t: { clipLabel: clipLabel() } }}
             }
           </p>
         </div>
@@ -71,7 +71,7 @@
       }
       <div class="controls-row">
         <div class="grp">
-          <button class="icon-btn" type="button" (click)="togglePlay()" [attr.aria-label]="paused() ? 'Reproducir' : 'Pausar'">
+          <button class="icon-btn" type="button" (click)="togglePlay()" [attr.aria-label]="(paused() ? 'player.play' : 'player.pause') | t">
             @if (paused()) {
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
             } @else {
@@ -80,7 +80,7 @@
           </button>
           @if (isOnDemandMode()) {
             <div class="vol-grp">
-              <button class="icon-btn" type="button" (click)="toggleMute()" [attr.aria-label]="muted() ? 'Activar sonido' : 'Silenciar'">
+              <button class="icon-btn" type="button" (click)="toggleMute()" [attr.aria-label]="(muted() ? 'player.unmute' : 'player.mute') | t">
                 @if (muted() || volume() === 0) {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4Z" /><path d="M16 10l5 5M21 10l-5 5" /></svg>
                 } @else {
@@ -95,11 +95,11 @@
                 step="1"
                 [value]="volumePct()"
                 (input)="onVolumeInput($event)"
-                aria-label="Volumen"
+                [attr.aria-label]="'player.volume' | t"
               />
             </div>
           } @else if (liveUrl()) {
-            <button class="icon-btn" type="button" (click)="toggleMute()" [attr.aria-label]="muted() ? 'Activar sonido' : 'Silenciar'">
+            <button class="icon-btn" type="button" (click)="toggleMute()" [attr.aria-label]="(muted() ? 'player.unmute' : 'player.mute') | t">
               @if (muted()) {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4Z" /><path d="M16 10l5 5M21 10l-5 5" /></svg>
               } @else {
@@ -110,7 +110,7 @@
         </div>
         <div class="grp">
           @if (isOnDemandMode()) {
-            <button class="icon-btn" type="button" (click)="downloadClip()" aria-label="Descargar grabación" title="Descargar">
+            <button class="icon-btn" type="button" (click)="downloadClip()" [attr.aria-label]="'player.downloadRecording' | t" [title]="'player.download' | t">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M5 19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2" /></svg>
             </button>
             <button
@@ -118,8 +118,8 @@
               type="button"
               (click)="toggleFavorite()"
               [class.fav-active]="isFavorite()"
-              [attr.aria-label]="isFavorite() ? 'Quitar de favoritos' : 'Marcar como favorito'"
-              [title]="isFavorite() ? 'Favorito (activo)' : 'Favorito'"
+              [attr.aria-label]="(isFavorite() ? 'gallery.card.removeFavorite' : 'player.markFavorite') | t"
+              [title]="(isFavorite() ? 'player.favoriteActive' : 'player.favorite') | t"
             >
               @if (isFavorite()) {
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.6l5.8-.8Z" /></svg>
@@ -132,17 +132,17 @@
               type="button"
               (click)="toggleAutoplay()"
               [class.autoplay-active]="autoplay()"
-              [attr.aria-label]="autoplay() ? 'Desactivar reproducción automática' : 'Activar reproducción automática'"
-              [title]="autoplay() ? 'Reproducción automática (activa)' : 'Reproducción automática'"
+              [attr.aria-label]="(autoplay() ? 'player.disableAutoplay' : 'player.enableAutoplay') | t"
+              [title]="(autoplay() ? 'player.autoplayOn' : 'player.autoplay') | t"
             >
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5v14l9-7z" /><path d="M17 5h2v14h-2z" /></svg>
             </button>
           } @else if (liveUrl()) {
-            <button class="icon-btn" type="button" (click)="takeSnapshot()" aria-label="Hacer captura" title="Captura">
+            <button class="icon-btn" type="button" (click)="takeSnapshot()" [attr.aria-label]="'player.takeSnapshot' | t" [title]="'player.snapshot' | t">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.2l.9-1.6A1 1 0 0 1 9 4h6a1 1 0 0 1 .9.6L16.8 6H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" /><circle cx="12" cy="13" r="3.3" /></svg>
             </button>
           }
-          <button class="icon-btn" type="button" (click)="toggleFullscreen()" [attr.aria-label]="isFullscreen() ? 'Salir de pantalla completa' : 'Pantalla completa'">
+          <button class="icon-btn" type="button" (click)="toggleFullscreen()" [attr.aria-label]="(isFullscreen() ? 'player.exitFullscreen' : 'player.fullscreen') | t">
             @if (isFullscreen()) {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M16 3v3a2 2 0 0 0 2 2h3" /><path d="M21 16h-3a2 2 0 0 0-2 2v3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /></svg>
             } @else {

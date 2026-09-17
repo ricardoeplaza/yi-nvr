@@ -1,6 +1,8 @@
 import { afterNextRender, Component, effect, ElementRef, inject, input, output, OnDestroy, signal, ViewChild } from '@angular/core';
 import type { Video } from '../../models/video.model';
 import { StreamService } from '../../services/stream.service';
+import { I18nService } from '../i18n/i18n.service';
+import { TranslatePipe } from '../i18n/translate.pipe';
 
 export type PlayerLiveStatus = 'idle' | 'loading' | 'playing' | 'error';
 
@@ -19,7 +21,7 @@ function fmtTime(sec: number): string {
 
 @Component({
   selector: 'yi-player',
-  imports: [],
+  imports: [TranslatePipe],
   templateUrl: './player.html',
   styleUrl: './player.scss',
 })
@@ -74,6 +76,7 @@ export class Player implements OnDestroy {
 
   /* ---------- estado live ---------- */
   private readonly streamService = inject(StreamService);
+  private readonly i18n = inject(I18nService);
   private destroyed = false;
   private liveActive = false;
   private livePlaying = false;
@@ -321,7 +324,8 @@ export class Player implements OnDestroy {
       pad2(d.getMinutes()) +
       pad2(d.getSeconds());
     const cam = (vid.camera_name || 'clip').replace(/[^\w-]+/g, '_');
-    return `grabacion-${cam}-${date}.mp4`;
+    const prefix = this.i18n.lang === 'en' ? 'recording-' : 'grabacion-';
+    return `${prefix}${cam}-${date}.mp4`;
   }
 
   private triggerDownload(href: string, name: string, revoke: boolean) {
@@ -369,7 +373,8 @@ export class Player implements OnDestroy {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const t = new Date();
-      const name = `captura-${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}-${pad2(
+      const prefix = this.i18n.lang === 'en' ? 'snapshot-' : 'captura-';
+      const name = `${prefix}${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}-${pad2(
         t.getHours()
       )}${pad2(t.getMinutes())}${pad2(t.getSeconds())}.png`;
       this.triggerDownload(url, name, true);

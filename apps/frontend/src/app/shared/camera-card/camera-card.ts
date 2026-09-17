@@ -1,12 +1,14 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, computed, inject, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Camera, CameraStatus } from '../../models/camera.model';
 import { FormatDatePipe } from '../format-date.pipe';
+import { I18nService } from '../i18n/i18n.service';
+import { TranslatePipe } from '../i18n/translate.pipe';
 
 @Component({
   selector: 'yi-camera-card',
   standalone: true,
-  imports: [RouterLink, FormatDatePipe],
+  imports: [RouterLink, FormatDatePipe, TranslatePipe],
   template: `
     <article class="camera-card">
       <a class="camera-thumb" routerLink="/cameras/{{ camera().id }}">
@@ -35,12 +37,12 @@ import { FormatDatePipe } from '../format-date.pipe';
         </div>
         @if (isYiHack()) {
           <div class="meta-row meta-row-2">
-            <span class="camera-count">{{ camera().video_count }} videos</span>
+            <span class="camera-count">{{ 'card.videoCount' | t: { count: camera().video_count } }}</span>
             <span class="sep">·</span>
             @if (lastEventAt()) {
               <span class="camera-last">{{ lastEventAt() | formatDate }}</span>
             } @else {
-              <span class="camera-last">Sin grabaciones</span>
+              <span class="camera-last">{{ 'gallery.empty.none' | t }}</span>
             }
             <div class="card-controls">
               @if (camera().capabilities.power) {
@@ -50,7 +52,7 @@ import { FormatDatePipe } from '../format-date.pipe';
                   type="button"
                   (click)="$event.stopPropagation(); togglePower.emit(camera())"
                 >
-                  <span>Encendido</span>
+                  <span>{{ 'cameraDetail.power' | t }}</span>
                   <span class="power-state">{{ powerOn() ? 'ON' : 'OFF' }}</span>
                 </button>
               }
@@ -60,8 +62,8 @@ import { FormatDatePipe } from '../format-date.pipe';
                   type="button"
                   (click)="$event.stopPropagation(); toggleRecMode.emit(camera())"
                 >
-                  <span>Grabación</span>
-                  <span class="rec-state">{{ recMode() === 'motion' ? 'Movimiento' : 'Continua' }}</span>
+                  <span>{{ 'common.recording' | t }}</span>
+                  <span class="rec-state">{{ (recMode() === 'motion' ? 'common.motion' : 'cameraDetail.continuous') | t }}</span>
                 </button>
               }
             </div>
@@ -84,6 +86,8 @@ export class CameraCard {
   readonly togglePower = output<Camera>();
   readonly toggleRecMode = output<Camera>();
 
+  private readonly i18n = inject(I18nService);
+
   /* ---------- derivados ---------- */
   readonly isYiHack = computed(() => this.camera().ecosystem === 'yi-hack');
 
@@ -105,9 +109,9 @@ export class CameraCard {
   readonly statusPill = computed<{ label: string; cls: string } | null>(() => {
     const s = this.status();
     if (!s || !s.state) return null;
-    if (s.state === 'on' && s.http !== false) return { label: 'En línea', cls: 'online' };
-    if (s.state === 'off') return { label: 'Apagada', cls: 'off' };
-    if (s.state === 'unreachable') return { label: 'Sin conexión', cls: 'unreachable' };
+    if (s.state === 'on' && s.http !== false) return { label: this.i18n.t('cameraDetail.stateOnline'), cls: 'online' };
+    if (s.state === 'off') return { label: this.i18n.t('cameraDetail.stateOff'), cls: 'off' };
+    if (s.state === 'unreachable') return { label: this.i18n.t('cameraDetail.stateUnreachable'), cls: 'unreachable' };
     return null;
   });
 
@@ -116,7 +120,7 @@ export class CameraCard {
       case 'yi-hack':
         return 'yi-hack';
       case 'generic':
-        return 'genérica';
+        return this.i18n.t('card.ecoGeneric');
       default:
         return this.camera().ecosystem;
     }

@@ -12,7 +12,7 @@
       <input
         #dateInput
         type="date"
-        aria-label="Elegir fecha"
+        [attr.aria-label]="'timeline.chooseDate' | t"
         [value]="dateValue()"
         [max]="dateMax()"
         (change)="onDateChange($event)"
@@ -24,7 +24,7 @@
     class="timeline-wrap"
     #timelineWrap
     tabindex="0"
-    aria-label="Línea de tiempo de grabaciones, usa las flechas izquierda y derecha para desplazarte"
+    [attr.aria-label]="'timeline.ariaLabel' | t"
   >
     <div class="timeline-scroll" #timelineScroll>
       <div class="timeline-track">
