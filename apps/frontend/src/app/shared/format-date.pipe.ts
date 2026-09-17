@@ -13,7 +13,8 @@ export class FormatDatePipe implements PipeTransform {
     if (isNaN(date.getTime())) {
       return '';
     }
-    const locale = this.i18n.lang === 'en' ? 'en-US' : 'es-ES';
+    // La etiqueta de locale se pasa tal cual a Intl (los 6 locales soportados son tags válidos).
+    const locale = this.i18n.lang;
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     const hm = `${pad(date.getHours())}:${pad(date.getMinutes())}`;

@@ -97,7 +97,8 @@ export class GalleryPage implements OnInit, OnDestroy {
   };
 
   constructor() {
-    const locale = this.i18n.lang === 'en' ? 'en-US' : 'es-ES';
+    // La etiqueta de locale se pasa tal cual a Intl (los 6 locales soportados son tags válidos).
+    const locale = this.i18n.lang;
     const fmt = new Intl.DateTimeFormat(locale, { month: 'short' });
     this.monthsShort = Array.from({ length: 12 }, (_, i) => fmt.format(new Date(2000, i, 1)).replace(/\.$/, ''));
 

@@ -1,39 +1,48 @@
 import { Injectable } from '@angular/core';
 import { I18N_KEYS, type I18nKey } from '../../../i18n/keys';
+import esMessages from '../../../i18n/es.json';
 import enMessages from '../../../i18n/en.json';
 
-/** English templates (en.json). Keys missing here fall back to Spanish. */
-const EN_MESSAGES: Record<string, string> = enMessages;
+/** Locales the app supports. Product decision: these 6, even though only
+ *  es/en JSON files exist so far (fr/de/pt/it land in later commits). */
+export const SUPPORTED_LOCALES = ['en', 'es', 'fr', 'de', 'pt', 'it'] as const;
+export type Locale = (typeof SUPPORTED_LOCALES)[number];
+
+// One entry per locale file. When a new locale JSON lands, add its import + line here.
+const MESSAGES: Partial<Record<Locale, Record<string, string>>> = {
+  es: esMessages,
+  en: enMessages,
+};
 
 /**
- * Minimal i18n: the language is detected once at bootstrap from the browser
+ * Minimal i18n: the locale is detected once at bootstrap from the browser
  * locale and lives in memory (no switching, no persistence).
  *
- * Spanish templates are the base (I18N_KEYS); English comes from en.json.
+ * English is the universal default: an unsupported browser locale resolves to
+ * 'en'. Spanish (es.json) is the source language and the guaranteed last
+ * fallback inside t(), so output is never broken.
  */
 @Injectable({ providedIn: 'root' })
 export class I18nService {
-  /** Detected language: 'en' if the browser locale starts with 'en', else 'es'. */
-  readonly lang: 'es' | 'en';
+  /** Detected locale ('en' when the browser locale is unsupported). */
+  readonly lang: Locale;
 
   constructor() {
-    const locale = (navigator.languages?.[0] ?? navigator.language).toLowerCase();
-    this.lang = locale.startsWith('en') ? 'en' : 'es';
+    const raw = (navigator.languages?.[0] ?? navigator.language).toLowerCase();
+    const prefix = raw.split('-')[0];
+    this.lang = (SUPPORTED_LOCALES as readonly string[]).includes(prefix) ? (prefix as Locale) : 'en';
     document.documentElement.lang = this.lang;
   }
 
   /**
    * Translates a key, substituting {{param}} placeholders.
-   * Spanish (I18N_KEYS) is the base; in English the en.json entry is used
-   * when present, otherwise it falls back to Spanish.
+   * Uses the detected locale's template when present and non-empty, otherwise
+   * falls back to Spanish (es.json — source language, always complete).
    */
   t(key: I18nKey, params?: Record<string, string | number>): string {
-    let template: string = I18N_KEYS[key];
-    if (this.lang === 'en') {
-      const en = EN_MESSAGES[key];
-      if (typeof en === 'string' && en.length > 0) {
-        template = en;
-      }
+    let template = MESSAGES[this.lang]?.[key];
+    if (typeof template !== 'string' || template.length === 0) {
+      template = MESSAGES.es?.[key] ?? '';
     }
     return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(params?.[name] ?? ''));
   }

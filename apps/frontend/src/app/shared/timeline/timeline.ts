@@ -12,7 +12,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import type { Video } from '../../models/video.model';
-import { I18nService } from '../i18n/i18n.service';
+import { I18nService, type Locale } from '../i18n/i18n.service';
 import { TranslatePipe } from '../i18n/translate.pipe';
 
 /* =========================================================
@@ -51,14 +51,15 @@ function isSameDay(a: Date, b: Date): boolean {
 function minutesNow(d: Date): number {
   return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
 }
-const EN_HOUR_FMT = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: true });
-function fmtHourLabel(h: number, lang: 'es' | 'en'): string {
-  if (lang === 'en') {
-    return EN_HOUR_FMT.format(new Date(2000, 0, 1, h, 0, 0));
+// Formateadores de hora por locale (cache: se crea una vez por locale).
+const HOUR_FMTS = new Map<Locale, Intl.DateTimeFormat>();
+function fmtHourLabel(h: number, lang: Locale): string {
+  let fmt = HOUR_FMTS.get(lang);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(lang, { hour: 'numeric', hour12: true });
+    HOUR_FMTS.set(lang, fmt);
   }
-  if (h === 0) return '12am';
-  if (h === 12) return '12pm';
-  return h < 12 ? h + 'am' : h - 12 + 'pm';
+  return fmt.format(new Date(2000, 0, 1, h, 0, 0));
 }
 function fmtTime(minutes: number): string {
   const h = Math.floor(minutes / 60) % 24;
@@ -69,7 +70,8 @@ function fmtTime(minutes: number): string {
 function pillLabel(d: Date, today: Date, i18n: I18nService): string {
   if (isSameDay(d, today)) return i18n.t('gallery.day.today');
   if (isSameDay(d, addDays(today, -1))) return i18n.t('gallery.day.yesterday');
-  const locale = i18n.lang === 'en' ? 'en-US' : 'es-ES';
+  // La etiqueta de locale se pasa tal cual a Intl (los 6 locales soportados son tags válidos).
+  const locale = i18n.lang;
   return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 }
 

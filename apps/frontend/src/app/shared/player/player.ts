@@ -324,7 +324,8 @@ export class Player implements OnDestroy {
       pad2(d.getMinutes()) +
       pad2(d.getSeconds());
     const cam = (vid.camera_name || 'clip').replace(/[^\w-]+/g, '_');
-    const prefix = this.i18n.lang === 'en' ? 'recording-' : 'grabacion-';
+    // es conserva el nombre en español; cualquier otro locale usa el inglés.
+    const prefix = this.i18n.lang === 'es' ? 'grabacion-' : 'recording-';
     return `${prefix}${cam}-${date}.mp4`;
   }
 
@@ -373,7 +374,8 @@ export class Player implements OnDestroy {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const t = new Date();
-      const prefix = this.i18n.lang === 'en' ? 'snapshot-' : 'captura-';
+      // es conserva el nombre en español; cualquier otro locale usa el inglés.
+      const prefix = this.i18n.lang === 'es' ? 'captura-' : 'snapshot-';
       const name = `${prefix}${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}-${pad2(
         t.getHours()
       )}${pad2(t.getMinutes())}${pad2(t.getSeconds())}.png`;

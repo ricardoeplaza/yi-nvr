@@ -153,8 +153,8 @@ export class DashboardPage implements OnInit, OnDestroy {
 
   fmtVideoDate(vid: Video): string {
     const d = new Date(vid.timestamp);
-    // Mismo criterio que FormatDatePipe: locale según el idioma detectado.
-    const locale = this.i18n.lang === 'en' ? 'en-US' : 'es-ES';
+    // Mismo criterio que FormatDatePipe: la etiqueta de locale se pasa tal cual a Intl.
+    const locale = this.i18n.lang;
     return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
   }
 
