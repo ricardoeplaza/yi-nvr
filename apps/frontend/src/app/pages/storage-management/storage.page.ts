@@ -2,8 +2,11 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CameraService } from '../../services/camera.service';
 import { StorageService } from '../../services/storage.service';
+import { I18nService } from '../../shared/i18n/i18n.service';
+import { TranslatePipe } from '../../shared/i18n/translate.pipe';
 import { Camera, CameraSd } from '../../models/camera.model';
 import { StorageDirFile, StorageFtpSuggested, StorageFtpUpdate, StoragePurgeRequest } from '../../models/storage.model';
+import type { I18nKey } from '../../../i18n/keys';
 
 // Directorio de eventos yi-hack: 14 chars "YYYY Y MM M DD D HH H".
 // Se interpreta como hora local de la cámara (mismo criterio que el API:
@@ -39,10 +42,10 @@ const SCOPE_MS: Record<string, number> = {
   month: 30 * 86_400_000
 };
 
-const SCOPE_LABEL: Record<string, string> = {
-  day: 'de más de un día',
-  week: 'de más de 1 semana',
-  month: 'de más de 30 días'
+const SCOPE_LABEL_KEY: Record<PurgeScope, I18nKey> = {
+  day: 'storage.purge.scope.day',
+  week: 'storage.purge.scope.week',
+  month: 'storage.purge.scope.month'
 };
 
 interface PurgeOutcome {
@@ -54,79 +57,79 @@ interface PurgeOutcome {
 @Component({
   selector: 'yi-storage-page',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, TranslatePipe],
   template: `
     <div class="storage-page">
       <header class="storage-header">
-        <a class="back-link" [routerLink]="['/cameras', cameraId]">← Volver</a>
-        <h1>Almacenamiento</h1>
+        <a class="back-link" [routerLink]="['/cameras', cameraId]">{{ 'storage.back' | t }}</a>
+        <h1>{{ 'storage.title' | t }}</h1>
         @if (camera()) {
           <span class="cam-name">{{ camera()!.name }}</span>
         }
       </header>
 
       @if (loading()) {
-        <div class="state-box">Cargando…</div>
+        <div class="state-box">{{ 'common.loading' | t }}</div>
       } @else if (loadError()) {
         <div class="state-box error">
           <p>{{ loadError() }}</p>
-          <button class="btn" (click)="loadStorage()">Reintentar</button>
+          <button class="btn" (click)="loadStorage()">{{ 'common.retry' | t }}</button>
         </div>
       } @else {
         <div class="storage-body">
         <section class="section">
           <div class="section-head">
-            <h2>Grabación cloud (FTP)</h2>
+            <h2>{{ 'storage.ftp.title' | t }}</h2>
             <button class="ghost-btn" (click)="ftpOpen.set(!ftpOpen())" [attr.aria-expanded]="ftpOpen()">
-              {{ ftpOpen() ? 'Ocultar' : 'Mostrar' }}
+              {{ (ftpOpen() ? 'storage.hide' : 'storage.show') | t }}
             </button>
           </div>
           @if (ftpLoading()) {
-            <p class="muted">Cargando configuración…</p>
+            <p class="muted">{{ 'storage.ftp.loading' | t }}</p>
           } @else if (ftpError()) {
             <div class="inline-error">{{ ftpError() }}
-              <button class="link-btn" (click)="loadFtp()">Reintentar</button>
+              <button class="link-btn" (click)="loadFtp()">{{ 'common.retry' | t }}</button>
             </div>
           } @else if (!ftpOpen()) {
             <p class="ftp-summary">
-              {{ ftpUpload() ? 'Activada' : 'Desactivada' }}
+              {{ (ftpUpload() ? 'storage.ftp.statusEnabled' : 'storage.ftp.statusDisabled') | t }}
             </p>
             @if (!ftpInSync()) {
               <div class="ftp-warning">
-                Configuración incorrecta: el push FTP no está configurado contra el NVR
+                {{ 'storage.ftp.misconfigured' | t }}
               </div>
             }
           } @else {
             <div class="ftp-form">
               <label class="switch-row">
-                <span class="field-label">Subir eventos a FTP</span>
+                <span class="field-label">{{ 'storage.ftp.uploadEvents' | t }}</span>
                 <input type="checkbox" [checked]="ftpUpload()" (change)="onFtpUploadChange($event)" />
               </label>
 
               <div class="ftp-fixed">
-                <p class="fixed-label">Configurado por el NVR (solo lectura)</p>
+                <p class="fixed-label">{{ 'storage.ftp.fixedLabel' | t }}</p>
 
                 <div class="field">
-                  <label class="field-label" for="ftp-host">Servidor (host)</label>
+                  <label class="field-label" for="ftp-host">{{ 'storage.ftp.server' | t }}</label>
                   <input id="ftp-host" type="text" [value]="ftpSuggested()?.FTP_HOST || ''" readonly />
                 </div>
 
                 <div class="field">
-                  <label class="field-label" for="ftp-dir">Carpeta de destino</label>
+                  <label class="field-label" for="ftp-dir">{{ 'storage.ftp.destinationFolder' | t }}</label>
                   <input id="ftp-dir" type="text" [value]="ftpSuggested()?.FTP_DIR || ''" readonly />
                 </div>
 
                 <div class="field">
-                  <label class="field-label" for="ftp-user">Usuario</label>
+                  <label class="field-label" for="ftp-user">{{ 'storage.ftp.user' | t }}</label>
                   <input id="ftp-user" type="text" [value]="ftpSuggested()?.FTP_USERNAME || ''" readonly />
                 </div>
 
                 <div class="field">
-                  <label class="field-label" for="ftp-pass">Contraseña</label>
+                  <label class="field-label" for="ftp-pass">{{ 'storage.ftp.password' | t }}</label>
                   <div class="pw-row">
                     <input id="ftp-pass" [type]="showPassword() ? 'text' : 'password'" [value]="ftpSuggested()?.FTP_PASSWORD || ''" readonly />
                     <button type="button" class="ghost-btn" (click)="showPassword.set(!showPassword())">
-                      {{ showPassword() ? 'Ocultar' : 'Mostrar' }}
+                      {{ (showPassword() ? 'storage.hide' : 'storage.show') | t }}
                     </button>
                   </div>
                 </div>
@@ -134,19 +137,17 @@ interface PurgeOutcome {
 
               @if (!ftpInSync()) {
                 <div class="out-of-sync">
-                  Configuración incorrecta: el push FTP no está configurado contra el
-                  NVR (los valores actuales de la cámara difieren de los derivados).
-                  Pulsa «Guardar» para aplicarlos.
+                  {{ 'storage.ftp.misconfiguredFull' | t }}
                 </div>
               }
 
               <label class="switch-row">
-                <span class="field-label">Carpeta con árbol de fechas</span>
+                <span class="field-label">{{ 'storage.ftp.dateTreeFolder' | t }}</span>
                 <input type="checkbox" [checked]="ftpDirTree()" (change)="onFtpDirTreeChange($event)" />
               </label>
 
               <label class="switch-row">
-                <span class="field-label">Borrar de la SD tras subir</span>
+                <span class="field-label">{{ 'storage.ftp.deleteAfterUpload' | t }}</span>
                 <input type="checkbox" [checked]="ftpDeleteAfter()" (change)="onFtpDeleteAfterChange($event)" />
               </label>
 
@@ -155,11 +156,11 @@ interface PurgeOutcome {
               }
               @if (ftpRebootNotice()) {
                 <div class="reboot-notice">
-                  <p>El cambio de subida FTP requiere reiniciar la cámara para aplicarse.</p>
+                  <p>{{ 'storage.ftp.restartRequired' | t }}</p>
                   @if (rebootMsg()) {
                     <p class="saved-ok">{{ rebootMsg() }}</p>
                   } @else {
-                    <button class="btn" (click)="rebootCamera()">Reiniciar cámara</button>
+                    <button class="btn" (click)="rebootCamera()">{{ 'common.restartCamera' | t }}</button>
                   }
                 </div>
               }
@@ -168,7 +169,7 @@ interface PurgeOutcome {
               }
 
               <button class="btn primary" [disabled]="ftpSaving()" (click)="saveFtp()">
-                {{ ftpSaving() ? 'Guardando…' : 'Guardar' }}
+                {{ (ftpSaving() ? 'storage.saving' : 'storage.save') | t }}
               </button>
             </div>
           }
@@ -176,20 +177,20 @@ interface PurgeOutcome {
 
         <section class="section files-top">
           <div class="section-head">
-            <h2>Ficheros de la tarjeta</h2>
-            <button class="ghost-btn" (click)="loadStorage()">Actualizar</button>
+            <h2>{{ 'storage.cardFiles' | t }}</h2>
+            <button class="ghost-btn" (click)="loadStorage()">{{ 'storage.refresh' | t }}</button>
           </div>
 
           <div class="purge-box">
-            <h3>Borrar ficheros</h3>
+            <h3>{{ 'storage.deleteFiles' | t }}</h3>
             <div class="purge-controls">
-              <select [value]="purgeScope()" (change)="onScopeChange($event)" aria-label="Alcance del borrado">
-                <option value="day">De más de un día</option>
-                <option value="week">De más de 1 semana</option>
-                <option value="month">De más de 30 días</option>
+              <select [value]="purgeScope()" (change)="onScopeChange($event)" [attr.aria-label]="'storage.scopeLabel' | t">
+                <option value="day">{{ 'storage.purge.option.day' | t }}</option>
+                <option value="week">{{ 'storage.purge.option.week' | t }}</option>
+                <option value="month">{{ 'storage.purge.option.month' | t }}</option>
               </select>
               <button class="danger-btn" [disabled]="purging()" (click)="onPurge()">
-                {{ purging() ? 'Borrando…' : 'Borrar' }}
+                {{ (purging() ? 'storage.deleting' : 'storage.delete') | t }}
               </button>
             </div>
 
@@ -199,11 +200,11 @@ interface PurgeOutcome {
             @if (purgeOutcome()) {
               <div class="purge-result" [class.partial]="purgeOutcome()!.failed > 0">
                 @if (purgeOutcome()!.expected === 0) {
-                  <p>No había directorios en ese alcance.</p>
+                  <p>{{ 'storage.purge.noDirsInScope' | t }}</p>
                 } @else {
-                  <p>Borrados {{ purgeOutcome()!.purged.length }} de {{ purgeOutcome()!.expected }} directorios.</p>
+                  <p>{{ 'storage.purge.resultDeleted' | t: { done: purgeOutcome()!.purged.length, total: purgeOutcome()!.expected } }}</p>
                   @if (purgeOutcome()!.failed > 0) {
-                    <p class="warn">{{ purgeOutcome()!.failed }} no pudieron borrarse.</p>
+                    <p class="warn">{{ 'storage.purge.resultFailed' | t: { count: purgeOutcome()!.failed } }}</p>
                   }
                 }
               </div>
@@ -215,15 +216,15 @@ interface PurgeOutcome {
           @if (sd()) {
             <div class="sd-box">
               <div class="sd-header">
-                <span class="sd-label">Tarjeta SD</span>
-                <span class="sd-value">{{ formatMb(sd()!.used_mb) }} / {{ formatMb(sd()!.total_mb) }} · {{ sd()!.free_pct }}% libre</span>
+                <span class="sd-label">{{ 'common.sdCard' | t }}</span>
+                <span class="sd-value">{{ formatMb(sd()!.used_mb) }} / {{ formatMb(sd()!.total_mb) }} · {{ sd()!.free_pct }}% {{ 'storage.free' | t }}</span>
               </div>
               <div class="sd-bar">
                 <div class="sd-fill" [style.width.%]="sdUsedPct()"></div>
               </div>
             </div>
           } @else {
-            <p class="muted">Información de la SD no disponible.</p>
+            <p class="muted">{{ 'storage.sdUnavailable' | t }}</p>
           }
         </div>
 
@@ -241,16 +242,16 @@ interface PurgeOutcome {
                   <span class="dir-name">{{ d.name }}</span>
                   <button class="danger-ghost" [disabled]="deletingDir() === d.name"
                     (click)="$event.stopPropagation(); deleteDir(d.name)">
-                    {{ deletingDir() === d.name ? 'Borrando…' : 'Borrar' }}
+                    {{ (deletingDir() === d.name ? 'storage.deleting' : 'storage.delete') | t }}
                   </button>
                 </li>
                 @if (isDirOpen(d.name)) {
                   <li class="dir-files">
                     @if (filesLoading() === d.name) {
-                      <p class="muted">Cargando ficheros…</p>
+                      <p class="muted">{{ 'storage.loadingFiles' | t }}</p>
                     } @else if (filesError() === d.name) {
-                      <p class="inline-error">No se pudo cargar el listado de ficheros.
-                        <button class="link-btn" (click)="loadDirFiles(d.name)">Reintentar</button>
+                      <p class="inline-error">{{ 'storage.fileListError' | t }}
+                        <button class="link-btn" (click)="loadDirFiles(d.name)">{{ 'common.retry' | t }}</button>
                       </p>
                     } @else {
                       @for (f of filesOf(d.name); track f.filename) {
@@ -260,11 +261,11 @@ interface PurgeOutcome {
                           <button class="danger-ghost"
                             [disabled]="deletingFile() === d.name + '/' + f.filename"
                             (click)="deleteFile(d.name, f.filename)">
-                            {{ deletingFile() === d.name + '/' + f.filename ? 'Borrando…' : 'Borrar' }}
+                            {{ (deletingFile() === d.name + '/' + f.filename ? 'storage.deleting' : 'storage.delete') | t }}
                           </button>
                         </div>
                       } @empty {
-                        <p class="muted">Sin ficheros de evento en este directorio.</p>
+                        <p class="muted">{{ 'storage.noEventFiles' | t }}</p>
                       }
                     }
                   </li>
@@ -272,7 +273,7 @@ interface PurgeOutcome {
               }
             </ul>
           } @else {
-            <p class="muted">Sin directorios de eventos en la tarjeta.</p>
+            <p class="muted">{{ 'storage.noEventDirs' | t }}</p>
           }
         </section>
         </div>
@@ -285,6 +286,7 @@ export class StoragePage implements OnInit {
   private route = inject(ActivatedRoute);
   private cameraService = inject(CameraService);
   private storageService = inject(StorageService);
+  private i18n = inject(I18nService);
 
   cameraId = '';
   camera = signal<Camera | null>(null);
@@ -403,7 +405,7 @@ export class StoragePage implements OnInit {
     this.storageService.saveFtpConfig(this.cameraId, payload).subscribe({
       next: (res) => {
         this.ftpSaving.set(false);
-        this.ftpSaved.set('Configuración guardada.');
+        this.ftpSaved.set(this.i18n.t('storage.saved'));
         this.ftpInSync.set(true);
         this.ftpRebootNotice.set(res.requires_reboot);
       },
@@ -415,18 +417,18 @@ export class StoragePage implements OnInit {
   }
 
   rebootCamera() {
-    if (!window.confirm('¿Reiniciar la cámara? Perderás la conexión en unos segundos.')) {
+    if (!window.confirm(this.i18n.t('common.restartConfirm'))) {
       return;
     }
     this.rebootError.set(null);
     this.cameraService.rebootCamera(this.cameraId).subscribe({
-      next: () => this.rebootMsg.set('Cámara reiniciando…'),
+      next: () => this.rebootMsg.set(this.i18n.t('storage.restarting')),
       error: (err) => this.rebootError.set(this.extractError(err))
     });
   }
 
   deleteDir(dir: string) {
-    if (!window.confirm(`¿Borrar el directorio de eventos "${dir}"? Esta acción no se puede deshacer.`)) {
+    if (!window.confirm(this.i18n.t('storage.confirmDeleteDir', { dir }))) {
       return;
     }
     this.deletingDir.set(dir);
@@ -480,7 +482,7 @@ export class StoragePage implements OnInit {
 
   deleteFile(dir: string, filename: string) {
     const file = `${dir}/${filename}`;
-    if (!window.confirm(`¿Borrar el fichero "${file}"? Esta acción no se puede deshacer.`)) {
+    if (!window.confirm(this.i18n.t('storage.confirmDeleteFile', { file }))) {
       return;
     }
     this.deletingFile.set(file);
@@ -500,7 +502,7 @@ export class StoragePage implements OnInit {
   onPurge() {
     const scope = this.purgeScope();
     const ms = SCOPE_MS[scope];
-    if (!window.confirm(`¿Borrar los eventos ${SCOPE_LABEL[scope]}? Esta acción no se puede deshacer.`)) {
+    if (!window.confirm(this.i18n.t('storage.confirmPurgeScope', { scopeLabel: this.i18n.t(SCOPE_LABEL_KEY[scope]) }))) {
       return;
     }
     // Retención: se borran los ficheros ANTERIORES a N días, nunca los
@@ -568,6 +570,6 @@ export class StoragePage implements OnInit {
 
   private extractError(err: unknown): string {
     const e = err as { error?: { error?: string }; message?: string };
-    return e?.error?.error || e?.message || 'Error desconocido';
+    return e?.error?.error || e?.message || this.i18n.t('common.errorUnknown');
   }
 }

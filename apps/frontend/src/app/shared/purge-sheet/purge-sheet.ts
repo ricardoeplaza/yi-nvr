@@ -1,4 +1,5 @@
 import { Component, input, output } from '@angular/core';
+import { TranslatePipe } from '../i18n/translate.pipe';
 
 export type PurgeScope = 'day' | 'week' | 'month' | 'all';
 
@@ -6,6 +7,7 @@ export type PurgeScope = 'day' | 'week' | 'month' | 'all';
   selector: 'yi-purge-sheet',
   templateUrl: './purge-sheet.html',
   styleUrl: './purge-sheet.scss',
+  imports: [TranslatePipe],
 })
 export class PurgeSheet {
   /* ---------- inputs ---------- */
