@@ -1,5 +1,5 @@
 <article class="card" [class.is-selected]="isSelected()" [class.selecting]="selecting()" (mouseenter)="onEnter()" (mouseleave)="onLeave()">
-  <div class="thumb" tabindex="0" role="button" aria-label="Abrir clip" (click)="select.emit(video())" (keydown.enter)="select.emit(video())">
+  <div class="thumb" tabindex="0" role="button" [aria-label]="'gallery.card.open' | t" (click)="select.emit(video())" (keydown.enter)="select.emit(video())">
     <div class="thumb-scene">
       <img [src]="cardSrc()" alt="" loading="lazy" />
     </div>
@@ -11,7 +11,7 @@
     <button
       class="fav-toggle"
       [class.is-fav]="video().favorite"
-      [attr.aria-label]="video().favorite ? 'Quitar de favoritos' : 'Añadir a favoritos'"
+      [attr.aria-label]="(video().favorite ? 'gallery.card.removeFavorite' : 'gallery.card.addFavorite') | t"
       (click)="$event.stopPropagation(); favorite.emit(video())"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8z"/></svg>
@@ -38,14 +38,14 @@
           (keydown.enter)="renameCommit.emit(video())"
           (keydown.escape)="renameCancel.emit()"
           (blur)="renameCommit.emit(video())"
-          aria-label="Nuevo nombre"
+          [aria-label]="'gallery.card.newName' | t"
         />
       } @else {
-        <span class="card-title" [class.is-empty]="!video().name">{{ video().name || 'Añadir nombre' }}</span>
-        <button class="icon-mini" (click)="renameStart.emit(video())" aria-label="Renombrar clip">
+        <span class="card-title" [class.is-empty]="!video().name">{{ video().name || ('gallery.card.namePlaceholder' | t) }}</span>
+        <button class="icon-mini" (click)="renameStart.emit(video())" [aria-label]="'gallery.card.rename' | t">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
         </button>
-        <button class="icon-mini danger" (click)="remove.emit(video())" aria-label="Eliminar clip">
+        <button class="icon-mini danger" (click)="remove.emit(video())" [aria-label]="'gallery.card.delete' | t">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
         </button>
       }

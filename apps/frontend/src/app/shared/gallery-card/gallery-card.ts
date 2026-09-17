@@ -1,12 +1,13 @@
 import { Component, computed, input, output, signal } from '@angular/core';
 import type { Video } from '../../models/video.model';
 import { FormatDurationPipe } from '../format-duration.pipe';
+import { TranslatePipe } from '../i18n/translate.pipe';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 @Component({
   selector: 'yi-gallery-card',
-  imports: [FormatDurationPipe],
+  imports: [FormatDurationPipe, TranslatePipe],
   templateUrl: './gallery-card.html',
   styleUrl: './gallery-card.scss',
 })

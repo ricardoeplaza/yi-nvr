@@ -1,13 +1,13 @@
 <div class="gallery-page">
-  <yi-app-header title="Galería">
+  <yi-app-header [title]="'gallery.title' | t">
     <div class="topbar-actions" appHeaderEnd>
-        <button class="text-btn" [class.is-active]="selecting()" (click)="toggleSelectMode()">{{ selecting() ? 'Cancelar' : 'Seleccionar' }}</button>
+        <button class="text-btn" [class.is-active]="selecting()" (click)="toggleSelectMode()">{{ (selecting() ? 'gallery.select.cancel' : 'gallery.select.start') | t }}</button>
         <button
           class="icon-btn"
           [class.active]="favoritesOnly()"
           (click)="toggleFavoritesOnly()"
-          aria-label="Solo favoritos"
-          title="Solo favoritos"
+          [aria-label]="'gallery.filter.favoritesOnly' | t"
+          [title]="'gallery.filter.favoritesOnly' | t"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8z"/></svg>
         </button>
@@ -15,8 +15,8 @@
           class="icon-btn"
           [class.active]="purgeOpen()"
           (click)="openPurgeSheet()"
-          aria-label="Retención y borrado automático"
-          title="Retención y borrado automático"
+          [aria-label]="'gallery.retention.title' | t"
+          [title]="'gallery.retention.title' | t"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
         </button>
@@ -28,13 +28,13 @@
         type="search"
         [value]="searchInput()"
         (input)="onSearchInput($event)"
-        placeholder="Buscar por nombre o cámara…"
-        aria-label="Buscar"
+        [placeholder]="'gallery.search.placeholder' | t"
+        [aria-label]="'gallery.search.label' | t"
       />
     </div>
 
-    <div class="chips-row" role="group" aria-label="Cámara">
-      <button class="chip" [class.is-selected]="cameraFilter() === ''" (click)="selectCamera('')">Todas</button>
+    <div class="chips-row" role="group" [aria-label]="'gallery.filter.camera' | t">
+      <button class="chip" [class.is-selected]="cameraFilter() === ''" (click)="selectCamera('')">{{ 'gallery.filter.allCameras' | t }}</button>
       @for (cam of cameras(); track cam.id) {
         <button
           class="chip"
@@ -54,28 +54,28 @@
         @if (datePopoverOpen()) {
           <div class="date-popover-panel">
             <label class="date-field">
-              <span>Desde</span>
-              <input type="date" [value]="startDate()" (change)="onStartDateChange($event)" aria-label="Desde" />
+              <span>{{ 'gallery.date.from' | t }}</span>
+              <input type="date" [value]="startDate()" (change)="onStartDateChange($event)" [aria-label]="'gallery.date.from' | t" />
             </label>
             <label class="date-field">
-              <span>Hasta</span>
-              <input type="date" [value]="endDate()" (change)="onEndDateChange($event)" aria-label="Hasta" />
+              <span>{{ 'gallery.date.to' | t }}</span>
+              <input type="date" [value]="endDate()" (change)="onEndDateChange($event)" [aria-label]="'gallery.date.to' | t" />
             </label>
             <div class="date-popover-actions">
-              <button type="button" class="ghost-btn" (click)="clearDateRange()">Limpiar</button>
-              <button type="button" class="apply-btn" (click)="closeDatePopover()">Aplicar</button>
+              <button type="button" class="ghost-btn" (click)="clearDateRange()">{{ 'gallery.date.clear' | t }}</button>
+              <button type="button" class="apply-btn" (click)="closeDatePopover()">{{ 'gallery.date.apply' | t }}</button>
             </div>
           </div>
         }
       </div>
       <div class="util-spacer"></div>
-      <span class="result-count">{{ videos().length }} clips</span>
+      <span class="result-count">{{ 'gallery.clipCount' | t: { count: videos().length } }}</span>
     </div>
   </yi-app-header>
 
   <main class="gallery">
     @if (loading()) {
-      <div class="loading">Cargando…</div>
+      <div class="loading">{{ 'common.loading' | t }}</div>
     } @else if (dayGroups().length) {
       @for (group of dayGroups(); track group.key) {
         <section class="day-group">
@@ -108,21 +108,21 @@
         </section>
       }
       @if (loadingMore()) {
-        <div class="loading">Cargando más…</div>
+        <div class="loading">{{ 'gallery.loadingMore' | t }}</div>
       } @else if (hasMore()) {
         <div class="load-more-row">
-          <button class="load-btn" (click)="loadMore()">Cargar más</button>
+          <button class="load-btn" (click)="loadMore()">{{ 'gallery.loadMore' | t }}</button>
         </div>
       }
     } @else {
       <div class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
         @if (hasFilters()) {
-          <h3>Sin resultados</h3>
-          <p>Ninguna grabación coincide con los filtros.</p>
+          <h3>{{ 'gallery.empty.noResults' | t }}</h3>
+          <p>{{ 'gallery.empty.noResultsMessage' | t }}</p>
         } @else {
-          <h3>Sin grabaciones</h3>
-          <p>Esperando nuevas grabaciones…</p>
+          <h3>{{ 'gallery.empty.none' | t }}</h3>
+          <p>{{ 'gallery.empty.waiting' | t }}</p>
         }
       </div>
     }
@@ -149,7 +149,7 @@
 
   @if (playingVideo()) {
     <div class="player-overlay" (click)="closePlayer()">
-      <button class="player-close" type="button" aria-label="Cerrar reproductor" (click)="closePlayer()">
+      <button class="player-close" type="button" [aria-label]="'gallery.player.close' | t" (click)="closePlayer()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
       <div class="player-host" (click)="$event.stopPropagation()">

@@ -9,10 +9,13 @@ import { GalleryCard } from '../../shared/gallery-card/gallery-card';
 import { PurgeSheet, type PurgeScope } from '../../shared/purge-sheet/purge-sheet';
 import { SelectionBar } from '../../shared/selection-bar/selection-bar';
 import { AppHeader } from '../../shared/app-header/app-header';
+import { I18nService } from '../../shared/i18n/i18n.service';
+import { TranslatePipe } from '../../shared/i18n/translate.pipe';
 import { VideoService } from '../../services/video.service';
 import { CameraService } from '../../services/camera.service';
 import { Video } from '../../models/video.model';
 import { Camera } from '../../models/camera.model';
+import type { I18nKey } from '../../../i18n/keys';
 
 // Retención: borra lo anterior a (now - SCOPE_MS), nunca el último periodo
 // (mismos valores que storage.page.ts).
@@ -22,11 +25,11 @@ const SCOPE_MS: Record<'day' | 'week' | 'month', number> = {
   month: 30 * 86_400_000
 };
 
-const SCOPE_LABEL: Record<PurgeScope, string> = {
-  day: 'más de 1 día',
-  week: 'más de 1 semana',
-  month: 'más de 1 mes',
-  all: 'toda la biblioteca'
+const SCOPE_LABEL_KEY: Record<PurgeScope, I18nKey> = {
+  day: 'gallery.retention.scope.day',
+  week: 'gallery.retention.scope.week',
+  month: 'gallery.retention.scope.month',
+  all: 'gallery.retention.scope.all'
 };
 
 interface DayGroup {
@@ -36,13 +39,11 @@ interface DayGroup {
   videos: Video[];
 }
 
-const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 @Component({
   selector: 'yi-gallery-page',
-  imports: [ConfirmDialog, Toast, Player, GalleryCard, PurgeSheet, SelectionBar, AppHeader],
+  imports: [ConfirmDialog, Toast, Player, GalleryCard, PurgeSheet, SelectionBar, AppHeader, TranslatePipe],
   templateUrl: './gallery.page.html',
   styleUrl: './gallery.page.scss',
 })
@@ -51,6 +52,10 @@ export class GalleryPage implements OnInit, OnDestroy {
   private cameraService = inject(CameraService);
   private confirmDialog = inject(ConfirmDialogService);
   private toast = inject(ToastService);
+  private i18n = inject(I18nService);
+
+  // Meses cortos según el idioma detectado (Intl; sin punto final, estilo 'ene'…).
+  readonly monthsShort: string[];
 
   readonly LIMIT = 24;
 
@@ -92,6 +97,10 @@ export class GalleryPage implements OnInit, OnDestroy {
   };
 
   constructor() {
+    const locale = this.i18n.lang === 'en' ? 'en-US' : 'es-ES';
+    const fmt = new Intl.DateTimeFormat(locale, { month: 'short' });
+    this.monthsShort = Array.from({ length: 12 }, (_, i) => fmt.format(new Date(2000, i, 1)).replace(/\.$/, ''));
+
     // Se registra/desregistra solo mientras el popover está abierto (cubre
     // toggle, close y clear, que solo tocan la señal).
     effect(() => {
@@ -106,7 +115,7 @@ export class GalleryPage implements OnInit, OnDestroy {
   dateLabel = computed(() => {
     const from = this.startDate();
     const to = this.endDate();
-    if (!from && !to) return 'Cualquier fecha';
+    if (!from && !to) return this.i18n.t('gallery.date.any');
     const fmt = (v: string) => {
       const parts = v.split('-');
       return `${parts[2]}/${parts[1]}`;
@@ -259,14 +268,14 @@ export class GalleryPage implements OnInit, OnDestroy {
     this.videoService.bulkFavorite(ids, target).subscribe({
       next: () => {
         if (this.destroyed) return;
-        this.toast.show(target ? 'Añadidos a favoritos' : 'Quitados de favoritos', 'success');
+        this.toast.show(this.i18n.t(target ? 'gallery.favorites.added' : 'gallery.favorites.removed'), 'success');
       },
       error: () => {
         if (this.destroyed) return;
         this.videos.update((list) =>
           list.map((v) => (prevFavorite.has(v.id) ? { ...v, favorite: prevFavorite.get(v.id)! } : v))
         );
-        this.toast.show('Error al actualizar favoritos', 'error');
+        this.toast.show(this.i18n.t('gallery.favorites.error'), 'error');
       }
     });
   }
@@ -275,11 +284,12 @@ export class GalleryPage implements OnInit, OnDestroy {
     const ids = [...this.selected()];
     if (!ids.length) return;
     const n = ids.length;
+    const clipWord = this.i18n.t(n === 1 ? 'gallery.words.clip' : 'gallery.words.clips');
     this.confirmDialog
       .show({
-        title: `Eliminar ${n} ${n === 1 ? 'clip' : 'clips'}`,
-        message: 'Esta acción no se puede deshacer.',
-        confirmLabel: `Eliminar ${n}`,
+        title: this.i18n.t('gallery.delete.title', { count: n, clipWord }),
+        message: this.i18n.t('gallery.delete.warning'),
+        confirmLabel: this.i18n.t('gallery.delete.confirmLabel', { count: n }),
         danger: true
       })
       .then((confirmed) => {
@@ -291,12 +301,13 @@ export class GalleryPage implements OnInit, OnDestroy {
             const removed = res.deleted?.length ? res.deleted.map(Number) : ids;
             const removedSet = new Set(removed);
             this.videos.update((list) => list.filter((v) => !removedSet.has(v.id)));
-            this.toast.show(`${n} ${n === 1 ? 'clip eliminado' : 'clips eliminados'}`, 'success');
+            const deletedWord = this.i18n.t(n === 1 ? 'gallery.deleteToast.singular' : 'gallery.deleteToast.plural');
+            this.toast.show(this.i18n.t('gallery.deleteToast.template', { count: n, deletedWord }), 'success');
             this.exitSelection();
           },
           error: () => {
             if (this.destroyed) return;
-            this.toast.show('Error al eliminar', 'error');
+            this.toast.show(this.i18n.t('gallery.delete.error'), 'error');
           }
         });
       });
@@ -409,15 +420,15 @@ export class GalleryPage implements OnInit, OnDestroy {
   }
 
   private formatDayDate(d: Date): string {
-    return `${pad2(d.getDate())} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+    return `${pad2(d.getDate())} ${this.monthsShort[d.getMonth()]} ${d.getFullYear()}`;
   }
 
   private dayLabel(d: Date): string {
     const now = new Date();
-    if (this.isSameDay(d, now)) return 'Hoy';
+    if (this.isSameDay(d, now)) return this.i18n.t('gallery.day.today');
     const yesterday = new Date(now);
     yesterday.setDate(now.getDate() - 1);
-    if (this.isSameDay(d, yesterday)) return 'Ayer';
+    if (this.isSameDay(d, yesterday)) return this.i18n.t('gallery.day.yesterday');
     return this.formatDayDate(d);
   }
 
@@ -492,9 +503,10 @@ export class GalleryPage implements OnInit, OnDestroy {
       error: () => {
         if (this.destroyed) return;
         // Rollback del input al nombre anterior (la lista nunca se tocó).
+        const err = this.i18n.t('gallery.rename.error');
         this.renameValue.set(vid.name ?? '');
-        this.renameError.set('No se pudo renombrar');
-        this.toast.show('No se pudo renombrar', 'error');
+        this.renameError.set(err);
+        this.toast.show(err, 'error');
       }
     });
   }
@@ -502,9 +514,9 @@ export class GalleryPage implements OnInit, OnDestroy {
   deleteVideo(vid: Video) {
     this.confirmDialog
       .show({
-        title: 'Eliminar grabación',
-        message: 'Esta acción no se puede deshacer.',
-        confirmLabel: 'Eliminar',
+        title: this.i18n.t('gallery.deleteRecording.title'),
+        message: this.i18n.t('gallery.delete.warning'),
+        confirmLabel: this.i18n.t('gallery.deleteRecording.confirmLabel'),
         danger: true
       })
       .then((confirmed) => {
@@ -513,11 +525,11 @@ export class GalleryPage implements OnInit, OnDestroy {
           next: () => {
             if (this.destroyed) return;
             this.videos.update((list) => list.filter((v) => v.id !== vid.id));
-            this.toast.show('Grabación eliminada', 'success');
+            this.toast.show(this.i18n.t('gallery.deleteRecording.toast'), 'success');
           },
           error: () => {
             if (this.destroyed) return;
-            this.toast.show('Error al eliminar', 'error');
+            this.toast.show(this.i18n.t('gallery.delete.error'), 'error');
           }
         });
       });
@@ -586,13 +598,14 @@ export class GalleryPage implements OnInit, OnDestroy {
     const scope = this.purgeScope();
     const message =
       scope === 'all'
-        ? 'Se eliminarán de forma permanente todos los clips de la biblioteca. Los favoritos no se borran.'
-        : `Se eliminarán de forma permanente los clips con ${SCOPE_LABEL[scope]} de antigüedad. Los favoritos no se borran.`;
+        ? this.i18n.t('gallery.purge.messageAll')
+        : this.i18n.t('gallery.purge.messageScope', { scopeLabel: this.i18n.t(SCOPE_LABEL_KEY[scope]) });
+    const clipWord = this.i18n.t(n === 1 ? 'gallery.words.clip' : 'gallery.words.clips');
     this.confirmDialog
       .show({
-        title: `Purgar ${n} ${n === 1 ? 'clip' : 'clips'}`,
+        title: this.i18n.t('gallery.purge.dialogTitle', { count: n, clipWord }),
         message,
-        confirmLabel: `Purgar ${n}`,
+        confirmLabel: this.i18n.t('gallery.purge.confirmLabel', { count: n }),
         danger: true
       })
       .then((confirmed) => {
@@ -604,9 +617,10 @@ export class GalleryPage implements OnInit, OnDestroy {
             this.purging.set(false);
             const purgedCount = (res.purged || []).length;
             if (purgedCount === 0) {
-              this.toast.show('No había clips en ese alcance', 'info');
+              this.toast.show(this.i18n.t('gallery.purge.empty'), 'info');
             } else {
-              this.toast.show(`${purgedCount} ${purgedCount === 1 ? 'clip purgado' : 'clips purgados'}`, 'success');
+              const deletedWord = this.i18n.t(purgedCount === 1 ? 'gallery.purgeToast.singular' : 'gallery.purgeToast.plural');
+              this.toast.show(this.i18n.t('gallery.deleteToast.template', { count: purgedCount, deletedWord }), 'success');
             }
             this.closePurgeSheet();
             this.reload();
@@ -614,7 +628,7 @@ export class GalleryPage implements OnInit, OnDestroy {
           error: () => {
             if (this.destroyed) return;
             this.purging.set(false);
-            this.toast.show('Error al purgar', 'error');
+            this.toast.show(this.i18n.t('gallery.purge.error'), 'error');
           }
         });
       });

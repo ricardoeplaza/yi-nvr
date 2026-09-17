@@ -1,7 +1,7 @@
 // Single source of truth for i18n keys: key → Spanish template (es).
 // English translations live in en.json. Params use {{param}} syntax.
 export const I18N_KEYS = {
-  // common.*
+  // ---- common ----
   'common.power.on': 'Cámara encendida',
   'common.power.off': 'Cámara apagada',
   'common.power.error': 'Error al cambiar el encendido',
@@ -14,9 +14,17 @@ export const I18N_KEYS = {
   'common.selection.plural': 'seleccionados',
   'common.selection.favorite': 'Favorito',
   'common.selection.delete': 'Eliminar',
-  // dashboard.*
+  'common.loading': 'Cargando…',
+  'common.sdCard': 'Tarjeta SD',
+  'common.recording': 'Grabación',
+  'common.motion': 'Movimiento',
+  'common.restartConfirm': '¿Reiniciar la cámara? Perderás la conexión en unos segundos.',
+  'common.restartCamera': 'Reiniciar cámara',
+  'common.retry': 'Reintentar',
+  'common.errorUnknown': 'Error desconocido',
+  // ---- dashboard ----
   'dashboard.empty.videos': 'Sin videos',
-  // cameras.*
+  // ---- cameras ----
   'cameras.title': 'Cámaras',
   'cameras.subtitle': '{{count}} cámara{{s}} conectada{{s}}',
   'cameras.empty.title': 'Sin cámaras',
@@ -24,19 +32,15 @@ export const I18N_KEYS = {
   'cameras.recording.motion': 'Grabación por movimiento',
   'cameras.recording.continuous': 'Grabación continua',
   'cameras.recording.error': 'Error al cambiar la grabación',
-  // cameraDetail.*
-  'cameraDetail.loading': 'Cargando…',
+  // ---- cameraDetail ----
   'cameraDetail.streamError': 'Error de stream',
   'cameraDetail.httpDownStatusViaMqtt': 'HTTP de la cámara caído · estado por MQTT',
-  'cameraDetail.sdCard': 'Tarjeta SD',
   'cameraDetail.notAvailable': 'No disponible',
   'cameraDetail.manageStorage': 'Gestionar almacenamiento',
   'cameraDetail.controls': 'Controles',
   'cameraDetail.power': 'Encendido',
   'cameraDetail.led': 'LED',
   'cameraDetail.nightVision': 'Visión nocturna',
-  'cameraDetail.recording': 'Grabación',
-  'cameraDetail.motion': 'Movimiento',
   'cameraDetail.continuous': 'Continua',
   'cameraDetail.motionNotification': 'Notificación de movimiento',
   'cameraDetail.saveToSd': 'Guardado en SD*',
@@ -57,8 +61,7 @@ export const I18N_KEYS = {
   'cameraDetail.stateOnline': 'En línea',
   'cameraDetail.stateOff': 'Apagada',
   'cameraDetail.stateUnreachable': 'Sin conexión',
-  'cameraDetail.restartConfirm': '¿Reiniciar la cámara? Perderás la conexión en unos segundos.',
-  // player.*
+  // ---- player ----
   'player.live': 'EN VIVO',
   'player.recordingLabel': 'Grabación | {{clipLabel}}',
   'player.volume': 'Volumen',
@@ -79,13 +82,13 @@ export const I18N_KEYS = {
   'player.autoplay': 'Reproducción automática',
   'player.exitFullscreen': 'Salir de pantalla completa',
   'player.fullscreen': 'Pantalla completa',
-  // timeline.*
+  // ---- timeline ----
   'timeline.chooseDate': 'Elegir fecha',
   'timeline.ariaLabel': 'Línea de tiempo de grabaciones, usa las flechas izquierda y derecha para desplazarte',
-  // card.*
+  // ---- card ----
   'card.videoCount': '{{count}} videos',
   'card.ecoGeneric': 'genérica',
-  // gallery.*
+  // ---- gallery ----
   'gallery.title': 'Galería',
   'gallery.select.cancel': 'Cancelar',
   'gallery.select.start': 'Seleccionar',
@@ -145,7 +148,7 @@ export const I18N_KEYS = {
   'gallery.card.removeFavorite': 'Quitar de favoritos',
   'gallery.card.addFavorite': 'Añadir a favoritos',
   'gallery.card.namePlaceholder': 'Añadir nombre',
-  // storage.*
+  // ---- storage ----
   'storage.purge.scope.day': 'de más de un día',
   'storage.purge.scope.week': 'de más de 1 semana',
   'storage.purge.scope.month': 'de más de 30 días',
@@ -168,7 +171,6 @@ export const I18N_KEYS = {
   'storage.ftp.dateTreeFolder': 'Carpeta con árbol de fechas',
   'storage.ftp.deleteAfterUpload': 'Borrar de la SD tras subir',
   'storage.ftp.restartRequired': 'El cambio de subida FTP requiere reiniciar la cámara para aplicarse.',
-  'storage.reboot': 'Reiniciar cámara',
   'storage.saving': 'Guardando…',
   'storage.save': 'Guardar',
   'storage.cardFiles': 'Ficheros de la tarjeta',
@@ -203,7 +205,7 @@ export const I18N_KEYS = {
   'storage.sheet.spaceUsed': 'Espacio usado',
   'storage.sheet.savedClips': 'Clips guardados',
   'storage.sheet.purgeNow': 'Purgar clips ahora',
-  // settings.*
+  // ---- settings ----
   'settings.title': 'Ajustes',
   'settings.notifications': 'Notificaciones',
   'settings.push.title': 'Notificaciones push',
@@ -212,7 +214,6 @@ export const I18N_KEYS = {
   'settings.push.disable': 'Desactivar',
   'settings.push.enabling': 'Activando…',
   'settings.push.statusError': 'Error',
-  'settings.push.retry': 'Reintentar',
   'settings.push.statusInactive': 'No activadas',
   'settings.push.enable': 'Activar',
   'settings.about': 'Acerca de',
@@ -225,13 +226,12 @@ export const I18N_KEYS = {
   'settings.push.errorPermission': 'Permiso de notificaciones denegado',
   'settings.push.errorNoVapidKey': 'El servidor no expone la clave VAPID',
   'settings.push.errorServiceWorker': 'No se pudo registrar el service worker',
-  'settings.push.errorUnknown': 'Error desconocido',
-  // login.*
+  // ---- login ----
   'login.subtitle': 'Inicia sesión para continuar',
   'login.signIn': 'Entrar',
-  // push.*
+  // ---- push ----
   'push.new_clip': 'Nuevo clip',
-  // errors.*
+  // ---- errors ----
   'errors.internal_error': 'error interno',
   'errors.go2rtc_unreachable': 'go2rtc unreachable',
   'errors.video_not_found': 'Video no encontrado',
