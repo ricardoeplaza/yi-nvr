@@ -1043,6 +1043,53 @@ Borrado: `apps/api/src/push/ftp-upload-state.js` (módulo + los 3 hooks
 dispersos). Supersede la parte de «espejo FTP_UPLOAD» de D15; el resto de D15
 (VAPID, suscripciones, formato del payload, triggers) sigue en pie.
 
+### D32 (yi-frontend) — i18n es/en propio (sin ngx-translate ni @angular/localize)
+
+i18n propio y ligero en el frontend, sin dependencias: un registro plano de
+keys con español como idioma fuente y un único archivo JSON para inglés.
+Ninguna librería de traducción ni `@angular/localize`; la detección del idioma
+es una sola vez, al arranque, desde el navegador.
+
+- **Fuente de verdad**: `apps/frontend/src/i18n/keys.ts` — registro plano
+  `key → plantilla en español` con placeholders `{{param}}`, declarado con
+  `as const` y tipado como `I18nKey`. 256 keys. El español ES el idioma
+  fuente (los valores de `keys.ts`); no existe `es.json`.
+- **Inglés**: `apps/frontend/src/i18n/en.json` — `{key: texto en inglés}`,
+  mismo orden de keys que `keys.ts`.
+- **`I18nService`** (`src/app/shared/i18n/`): detecta el idioma UNA VEZ al
+  bootstrap desde `navigator.language` / `navigator.languages[0]` (match
+  contra `[es, en]`, default `es`). Solo en memoria — sin persistencia, sin
+  cambio en caliente — y pone `<html lang>`. `t(key, params?)` con fallback
+  garantizado: key desconocida o texto en inglés ausente → texto español,
+  nunca salida rota. `translateApiError(err)` mapea códigos de error de la
+  API a keys `errors.*`.
+- **`TranslatePipe`** (nombre `t`) para templates: `'key' | t`, con
+  parámetros `'key' | t: { count: n }`; los componentes que la usan deben
+  añadirla a su array `imports`.
+- **Fechas, meses y etiquetas de hora NO son keys**: se formatean con
+  `Intl.DateTimeFormat` (pipe `format-date` + `fmtHourLabel(h, lang)` en la
+  timeline), que ya devuelve el texto en el idioma del navegador.
+- **Títulos de push**: el backend envía títulos en español (`'Movimiento'`,
+  `'Nuevo clip'` — `ftp.js` / `server.js`); `apps/frontend/public/push/sw.js`
+  los traduce en cliente según `self.navigator.language` (mismo criterio de
+  detección que la app) sin cambiar el contrato del payload.
+- **Tests**: vitest/jsdom; los specs usan un provider `i18nStub` (identidad
+  es: `t(key, params)` devuelve el valor de `I18N_KEYS` con sustitución de
+  `{{param}}`, `lang: 'es'`) para que las aserciones en español sigan siendo
+  válidas bajo jsdom. Ejemplo canónico:
+  `src/app/pages/storage-management/storage.page.spec.ts`.
+- **Guardia**: `apps/frontend/scripts/check-i18n.mjs` (sin dependencias;
+  `node scripts/check-i18n.mjs` desde `apps/frontend`): paridad de conjunto
+  de keys entre `keys.ts` ↔ `en.json`, paridad de nombres de `{{param}}` por
+  key, y escaneo de usos (`t('...')` y `'...' | t`, incluidas ternarias) —
+  FAIL si un uso no resuelve; WARN para keys definidas pero no usadas.
+  Salida esperada hoy: 256 keys, 0 fallos, 45 warnings (38 `errors.*`
+  referenciadas dinámicamente por `translateApiError` + 7 keys de scope
+  referenciadas dinámicamente por los mapas `SCOPE_LABEL_KEY` de
+  gallery/storage).
+- **Status**: `[HECHO]` — verificado con tsc, suite completa (230 tests) y
+  `check-i18n`.
+
 ## Notas durante el desarrollo (live view)
 
 Historial de la depuración del stream en vivo, para que no caiga en el
