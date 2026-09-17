@@ -230,8 +230,6 @@ export const I18N_KEYS = {
   // ---- login ----
   'login.subtitle': 'Inicia sesión para continuar',
   'login.signIn': 'Entrar',
-  // ---- push ----
-  'push.new_clip': 'Nuevo clip',
   // ---- errors ----
   'errors.internal_error': 'error interno',
   'errors.go2rtc_unreachable': 'go2rtc unreachable',

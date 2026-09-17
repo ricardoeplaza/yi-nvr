@@ -17,6 +17,19 @@
 
 const ICON_URL = '/icons/icon-192x192.png';
 
+// Títulos generados por el backend (apps/api/src/ftp.js y server.js) en
+// español. Se traducen aquí según el idioma del navegador — mismo criterio
+// de detección que la app (navigator.language, sin persistencia).
+const TITLE_I18N = {
+    'Movimiento': 'Motion',
+    'Nuevo clip': 'New clip'
+};
+
+function translateTitle(title) {
+    const lang = (self.navigator.language || 'es').toLowerCase();
+    return lang.startsWith('en') ? (TITLE_I18N[title] ?? title) : title;
+}
+
 self.addEventListener('push', (event) => {
     let payload = {};
     try {
@@ -25,7 +38,7 @@ self.addEventListener('push', (event) => {
         payload = { body: event.data ? event.data.text() : '' };
     }
     event.waitUntil(
-        self.registration.showNotification(payload.title || 'yi-nvr', {
+        self.registration.showNotification(translateTitle(payload.title) || 'yi-nvr', {
             body: payload.body || '',
             icon: payload.icon || ICON_URL,
             image: payload.image || undefined,

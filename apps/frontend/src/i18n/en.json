@@ -217,7 +217,6 @@
   "settings.push.errorServiceWorker": "Could not register the service worker",
   "login.subtitle": "Sign in to continue",
   "login.signIn": "Sign in",
-  "push.new_clip": "New clip",
   "errors.internal_error": "internal error",
   "errors.go2rtc_unreachable": "go2rtc unreachable",
   "errors.video_not_found": "Video not found",
