@@ -12,6 +12,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import type { Video } from '../../models/video.model';
+import { I18nService } from '../i18n/i18n.service';
 
 /* =========================================================
    Constantes de layout / comportamiento
@@ -49,7 +50,11 @@ function isSameDay(a: Date, b: Date): boolean {
 function minutesNow(d: Date): number {
   return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
 }
-function fmtHourLabel(h: number): string {
+const EN_HOUR_FMT = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: true });
+function fmtHourLabel(h: number, lang: 'es' | 'en'): string {
+  if (lang === 'en') {
+    return EN_HOUR_FMT.format(new Date(2000, 0, 1, h, 0, 0));
+  }
   if (h === 0) return '12am';
   if (h === 12) return '12pm';
   return h < 12 ? h + 'am' : h - 12 + 'pm';
@@ -60,10 +65,11 @@ function fmtTime(minutes: number): string {
   const s = Math.floor((minutes * 60) % 60);
   return pad2(h) + ':' + pad2(m) + ':' + pad2(s);
 }
-function pillLabel(d: Date, today: Date): string {
-  if (isSameDay(d, today)) return 'Hoy';
-  if (isSameDay(d, addDays(today, -1))) return 'Ayer';
-  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+function pillLabel(d: Date, today: Date, i18n: I18nService): string {
+  if (isSameDay(d, today)) return i18n.t('gallery.day.today');
+  if (isSameDay(d, addDays(today, -1))) return i18n.t('gallery.day.yesterday');
+  const locale = i18n.lang === 'en' ? 'en-US' : 'es-ES';
+  return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 }
 
 /* =========================================================
@@ -140,6 +146,7 @@ export class Timeline implements OnDestroy {
   @ViewChild('dateInput') dateInputRef?: ElementRef<HTMLInputElement>;
 
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly i18n = inject(I18nService);
   private destroyed = false;
 
   /* ---------- estado interno ---------- */
@@ -168,7 +175,7 @@ export class Timeline implements OnDestroy {
 
   constructor() {
     for (let h = 0; h < 24; h++) {
-      this.hourTicks.push({ left: h * 60 * PX_PER_MIN, label: fmtHourLabel(h), major: true });
+      this.hourTicks.push({ left: h * 60 * PX_PER_MIN, label: fmtHourLabel(h, this.i18n.lang), major: true });
       for (let m = TICK_MIN; m < 60; m += TICK_MIN) {
         this.hourTicks.push({ left: h * 60 * PX_PER_MIN + m * PX_PER_MIN, label: '', major: false });
       }
@@ -339,7 +346,7 @@ export class Timeline implements OnDestroy {
     if (!info) return;
     const today = startOfDay(this.now());
     this.centerTime.set(fmtTime(info.minute));
-    const label = pillLabel(info.date, today);
+    const label = pillLabel(info.date, today, this.i18n);
     this.centerDayLabel.set('· ' + label);
     this.dateLabel.set(label);
   }
