@@ -30,7 +30,7 @@ The result is a single project that covers the whole job the Xiaomi ecosystem us
 - **Live view** — WebRTC in the browser via a `go2rtc` sidecar (MSE/mp4 fallback), proxied through the same process. No plugins.
 - **Web Push notifications** — on motion and on clip processing completion.
 - **Mobile-first PWA** — dashboard, camera controls, clip gallery, timeline, settings.
-- **Internationalization** — Spanish (default) and English UI, auto-detected from the browser language at startup; no persistence, no in-app switching.
+- **Internationalization** — English (default), Spanish, French, German, Portuguese and Italian, auto-detected from the browser language at startup; no persistence, no in-app switching.
 - **Retention & bounded disk** — age-based and capacity-based cleanup policies.
 - **Single HTTP entry point** — API + PWA + media + stream proxy on one port. No nginx, no extra web server.
 - **Lightweight** — designed to run on small ARM SBCs (Orange Pi and friends), behind a Tailscale/Headscale VPN.

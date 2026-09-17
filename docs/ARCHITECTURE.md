@@ -1043,52 +1043,59 @@ Borrado: `apps/api/src/push/ftp-upload-state.js` (módulo + los 3 hooks
 dispersos). Supersede la parte de «espejo FTP_UPLOAD» de D15; el resto de D15
 (VAPID, suscripciones, formato del payload, triggers) sigue en pie.
 
-### D32 (yi-frontend) — i18n es/en propio (sin ngx-translate ni @angular/localize)
+### D32 (yi-frontend) — i18n multilingüe propio (6 locales, sin ngx-translate ni @angular/localize)
 
-i18n propio y ligero en el frontend, sin dependencias: un registro plano de
-keys con español como idioma fuente y un único archivo JSON para inglés.
-Ninguna librería de traducción ni `@angular/localize`; la detección del idioma
-es una sola vez, al arranque, desde el navegador.
+i18n propio y ligero en el frontend, sin dependencias: 6 locales como
+archivos JSON planos con keys idénticas y orden idéntico. El español ES el
+idioma fuente (las keys nuevas se escriben primero en `es.json`); el inglés
+ES el default universal de detección. Ninguna librería de traducción ni
+`@angular/localize`; la detección del idioma es una sola vez, al arranque,
+desde el navegador.
 
-- **Fuente de verdad**: `apps/frontend/src/i18n/keys.ts` — registro plano
-  `key → plantilla en español` con placeholders `{{param}}`, declarado con
-  `as const` y tipado como `I18nKey`. 256 keys. El español ES el idioma
-  fuente (los valores de `keys.ts`); no existe `es.json`.
-- **Inglés**: `apps/frontend/src/i18n/en.json` — `{key: texto en inglés}`,
-  mismo orden de keys que `keys.ts`.
+- **Locales**: `en` (default), `es`, `fr`, `de`, `pt`, `it` — 6 archivos
+  planos en `apps/frontend/src/i18n/`, todos con las mismas 256 keys y el
+  mismo orden. `pt` es neutro con sesgo brasileño (el prefijo de detección
+  `pt` cubre ambos).
+- **`keys.ts`**: shim de tipos de 3 líneas — `import es from './es.json'`,
+  `I18nKey = keyof typeof es` y re-export de `I18N_KEYS`. El registro real
+  de keys vive en los JSON.
 - **`I18nService`** (`src/app/shared/i18n/`): detecta el idioma UNA VEZ al
-  bootstrap desde `navigator.language` / `navigator.languages[0]` (match
-  contra `[es, en]`, default `es`). Solo en memoria — sin persistencia, sin
-  cambio en caliente — y pone `<html lang>`. `t(key, params?)` con fallback
-  garantizado: key desconocida o texto en inglés ausente → texto español,
-  nunca salida rota. `translateApiError(err)` mapea códigos de error de la
-  API a keys `errors.*`.
+  bootstrap — prefijo de 2 letras de `navigator.languages[0]` /
+  `navigator.language` contra `SUPPORTED_LOCALES = ['en','es','fr','de',
+  'pt','it']`; **no soportado → `'en'`** (cambio respecto al antiguo
+  default `es`). Solo en memoria — sin persistencia, sin cambio en caliente
+  — y pone `<html lang>`. Registro de locales: un import + una línea por
+  locale en `MESSAGES`. Key ausente o vacía en el locale detectado →
+  fallback a es (idioma fuente), nunca salida rota. `translateApiError(err)`
+  mapea códigos de error de la API a keys `errors.*`.
 - **`TranslatePipe`** (nombre `t`) para templates: `'key' | t`, con
   parámetros `'key' | t: { count: n }`; los componentes que la usan deben
   añadirla a su array `imports`.
 - **Fechas, meses y etiquetas de hora NO son keys**: se formatean con
-  `Intl.DateTimeFormat` (pipe `format-date` + `fmtHourLabel(h, lang)` en la
-  timeline), que ya devuelve el texto en el idioma del navegador.
+  `Intl.DateTimeFormat` usando el tag del locale detectado (pipe
+  `format-date` + `fmtHourLabel(h, lang)` en la timeline, cacheada por
+  locale), que ya devuelve el texto en el idioma del navegador — p. ej. es
+  muestra «7 a. m.» en vez del antiguo «7am» hardcodeado en inglés.
 - **Títulos de push**: el backend envía títulos en español (`'Movimiento'`,
   `'Nuevo clip'` — `ftp.js` / `server.js`); `apps/frontend/public/push/sw.js`
-  los traduce en cliente según `self.navigator.language` (mismo criterio de
-  detección que la app) sin cambiar el contrato del payload.
+  los traduce en cliente para los 6 locales según `self.navigator.language`
+  (default `en`) sin cambiar el contrato del payload.
 - **Tests**: vitest/jsdom; los specs usan un provider `i18nStub` (identidad
   es: `t(key, params)` devuelve el valor de `I18N_KEYS` con sustitución de
   `{{param}}`, `lang: 'es'`) para que las aserciones en español sigan siendo
-  válidas bajo jsdom. Ejemplo canónico:
+  válidas bajo jsdom. 230/230 tests. Ejemplo canónico:
   `src/app/pages/storage-management/storage.page.spec.ts`.
 - **Guardia**: `apps/frontend/scripts/check-i18n.mjs` (sin dependencias;
-  `node scripts/check-i18n.mjs` desde `apps/frontend`): paridad de conjunto
-  de keys entre `keys.ts` ↔ `en.json`, paridad de nombres de `{{param}}` por
-  key, y escaneo de usos (`t('...')` y `'...' | t`, incluidas ternarias) —
-  FAIL si un uso no resuelve; WARN para keys definidas pero no usadas.
-  Salida esperada hoy: 256 keys, 0 fallos, 45 warnings (38 `errors.*`
-  referenciadas dinámicamente por `translateApiError` + 7 keys de scope
-  referenciadas dinámicamente por los mapas `SCOPE_LABEL_KEY` de
-  gallery/storage).
-- **Status**: `[HECHO]` — verificado con tsc, suite completa (230 tests) y
-  `check-i18n`.
+  `node scripts/check-i18n.mjs` desde `apps/frontend`): paridad de TODOS los
+  JSON de locales vs `es.json` — conjunto de keys, orden index-a-index y
+  nombres de `{{param}}` por key — más escaneo de usos (`t('...')` y
+  `'...' | t`, incluidas ternarias) — FAIL si un uso no resuelve; WARN para
+  keys definidas pero no usadas. Salida esperada hoy: 6 archivos × 256
+  entradas, 0 fallos, 45 warnings (todas referenciadas dinámicamente: 38
+  `errors.*` vía `translateApiError` + 7 keys de scope vía los mapas
+  `SCOPE_LABEL_KEY` de gallery/storage).
+- **Status**: `[HECHO]` — release de 6 locales verificado con `check-i18n`
+  (6 × 256, 0 fallos), tsc limpio y suite completa (230/230).
 
 ## Notas durante el desarrollo (live view)
 
