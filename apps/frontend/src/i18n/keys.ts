@@ -9,6 +9,7 @@ export const I18N_KEYS = {
   'common.nav.sections': 'Secciones',
   'common.nav.home': 'Inicio',
   'common.confirm': 'Confirmar',
+  'common.cancel': 'Cancelar',
   'common.empty.title': 'Sin contenido',
   'common.selection.singular': 'seleccionado',
   'common.selection.plural': 'seleccionados',

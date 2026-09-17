@@ -1,17 +1,15 @@
 <div class="cameras-page">
-  <yi-app-header title="Cámaras">
+  <yi-app-header [title]="'cameras.title' | t">
     @if (cameras().length) {
       <p class="cameras-subtitle">
-        {{ cameras().length }} cámara{{ cameras().length !== 1 ? 's' : '' }} conectada{{
-          cameras().length !== 1 ? 's' : ''
-        }}
+        {{ 'cameras.subtitle' | t: { count: cameras().length, s: cameras().length !== 1 ? 's' : '' } }}
       </p>
     }
   </yi-app-header>
 
   <main class="cameras">
     @if (loading()) {
-      <div class="loading">Cargando…</div>
+      <div class="loading">{{ 'common.loading' | t }}</div>
     } @else if (cameras().length) {
       <div class="camera-grid">
         @for (cam of cameras(); track cam.id) {
@@ -27,7 +25,7 @@
         }
       </div>
     } @else {
-      <yi-empty-state icon="📷" title="Sin cámaras" subtitle="Configura cámaras en cameras.json" />
+      <yi-empty-state icon="📷" [title]="'cameras.empty.title' | t" [subtitle]="'cameras.empty.subtitle' | t" />
     }
   </main>
 </div>

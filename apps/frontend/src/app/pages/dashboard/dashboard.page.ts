@@ -6,6 +6,8 @@ import { Camera } from '../../models/camera.model';
 import { Video } from '../../models/video.model';
 import { Timeline } from '../../shared/timeline/timeline';
 import { Player } from '../../shared/player/player';
+import { I18nService } from '../../shared/i18n/i18n.service';
+import { TranslatePipe } from '../../shared/i18n/translate.pipe';
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -14,16 +16,16 @@ function pad2(n: number): string {
 @Component({
   selector: 'yi-dashboard-page',
   standalone: true,
-  imports: [Timeline, Player],
+  imports: [Timeline, Player, TranslatePipe],
   template: `
     <div class="home">
       @if (loadingCameras()) {
-        <div class="home-loading">Cargando…</div>
+        <div class="home-loading">{{ 'common.loading' | t }}</div>
       } @else if (cameras().length === 0) {
         <div class="empty-home">
           <div class="empty-icon">📷</div>
-          <h2>Sin cámaras</h2>
-          <p>Configura cámaras en cameras.json</p>
+          <h2>{{ 'cameras.empty.title' | t }}</h2>
+          <p>{{ 'cameras.empty.subtitle' | t }}</p>
         </div>
       } @else {
         <div class="home-main">
@@ -45,7 +47,7 @@ function pad2(n: number): string {
 
         <div class="events">
           @if (videos().length === 0) {
-            <div class="empty-day">Sin videos</div>
+            <div class="empty-day">{{ 'dashboard.empty.videos' | t }}</div>
           } @else {
             @for (vid of videos(); track vid.id) {
               <div class="ev-row" [class.active]="selectedVideo()?.id === vid.id" (click)="selectVideo(vid)" style="--ev-color:#3b82f6">
@@ -60,7 +62,7 @@ function pad2(n: number): string {
                 </div>
                 <div class="ev-mid">
                   <p class="ev-title">
-                    Grabación
+                    {{ 'common.recording' | t }}
                     @if (vid.favorite) {
                       <svg class="ev-fav" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.6l5.8-.8Z" /></svg>
                     }
@@ -84,6 +86,7 @@ export class DashboardPage implements OnInit, OnDestroy {
   private cameraService = inject(CameraService);
   private videoService = inject(VideoService);
   private route = inject(ActivatedRoute);
+  private i18n = inject(I18nService);
 
   cameras = signal<Camera[]>([]);
   loadingCameras = signal(true);
@@ -150,7 +153,9 @@ export class DashboardPage implements OnInit, OnDestroy {
 
   fmtVideoDate(vid: Video): string {
     const d = new Date(vid.timestamp);
-    return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+    // Mismo criterio que FormatDatePipe: locale según el idioma detectado.
+    const locale = this.i18n.lang === 'en' ? 'en-US' : 'es-ES';
+    return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
   }
 
   fmtVideoTime(vid: Video): string {

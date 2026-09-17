@@ -1,5 +1,6 @@
 import { Component, HostListener, inject } from '@angular/core';
 import { ConfirmDialogService } from './confirm-dialog.service';
+import { I18nService } from '../i18n/i18n.service';
 
 @Component({
   selector: 'yi-confirm-dialog',
@@ -22,10 +23,11 @@ import { ConfirmDialogService } from './confirm-dialog.service';
 })
 export class ConfirmDialog {
   private readonly service = inject(ConfirmDialogService);
+  private readonly i18n = inject(I18nService);
 
   protected readonly options = this.service.state;
-  protected readonly confirmLabel = () => this.options()?.confirmLabel || 'Confirmar';
-  protected readonly cancelLabel = () => this.options()?.cancelLabel || 'Cancelar';
+  protected readonly confirmLabel = () => this.options()?.confirmLabel || this.i18n.t('common.confirm');
+  protected readonly cancelLabel = () => this.options()?.cancelLabel || this.i18n.t('common.cancel');
 
   protected onConfirm(): void {
     this.service.resolve(true);

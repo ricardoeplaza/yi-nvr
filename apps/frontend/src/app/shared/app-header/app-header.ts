@@ -1,14 +1,16 @@
 import { Component, inject, input } from '@angular/core';
 import { AppNavService } from '../app-nav/app-nav.service';
+import { TranslatePipe } from '../i18n/translate.pipe';
 
 @Component({
   selector: 'yi-app-header',
   standalone: true,
+  imports: [TranslatePipe],
   template: `
     <header class="app-header">
       <div class="app-header-row">
         @if (backTo()) {
-          <button type="button" class="app-header-back" (click)="onBack()" aria-label="Volver">
+          <button type="button" class="app-header-back" (click)="onBack()" [attr.aria-label]="'common.back' | t">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
           </button>
         }

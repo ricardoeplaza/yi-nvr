@@ -5,11 +5,13 @@ import { AppHeader } from '../../shared/app-header/app-header';
 import { CameraService } from '../../services/camera.service';
 import { PowerService } from '../../services/power.service';
 import { ToastService } from '../../shared/toast/toast.service';
+import { I18nService } from '../../shared/i18n/i18n.service';
+import { TranslatePipe } from '../../shared/i18n/translate.pipe';
 import { Camera } from '../../models/camera.model';
 
 @Component({
   selector: 'yi-cameras',
-  imports: [CameraCard, EmptyState, AppHeader],
+  imports: [CameraCard, EmptyState, AppHeader, TranslatePipe],
   templateUrl: './cameras.html',
   styleUrl: './cameras.scss',
 })
@@ -18,6 +20,7 @@ export class Cameras implements OnInit, OnDestroy {
   // Público: el template consulta isOn() por cámara.
   readonly powerService = inject(PowerService);
   private toast = inject(ToastService);
+  private i18n = inject(I18nService);
 
   cameras = signal<Camera[]>([]);
   loading = signal(true);
@@ -71,10 +74,13 @@ export class Cameras implements OnInit, OnDestroy {
     );
     this.cameraService.setRecMode(cam.id, next).subscribe({
       next: () =>
-        this.toast.show(next === 'motion' ? 'Grabación por movimiento' : 'Grabación continua', 'success'),
+        this.toast.show(
+          next === 'motion' ? this.i18n.t('cameras.recording.motion') : this.i18n.t('cameras.recording.continuous'),
+          'success',
+        ),
       error: () => {
         this.cameras.set(prev);
-        this.toast.show('Error al cambiar la grabación', 'error');
+        this.toast.show(this.i18n.t('cameras.recording.error'), 'error');
       },
     });
   }

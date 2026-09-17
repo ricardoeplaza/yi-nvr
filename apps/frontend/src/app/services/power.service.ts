@@ -1,11 +1,13 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { CameraService } from './camera.service';
 import { ToastService } from '../shared/toast/toast.service';
+import { I18nService } from '../shared/i18n/i18n.service';
 
 @Injectable({ providedIn: 'root' })
 export class PowerService {
   private readonly cameraService = inject(CameraService);
   private readonly toast = inject(ToastService);
+  private readonly i18n = inject(I18nService);
 
   readonly powers = signal<Record<string, boolean>>({});
 
@@ -27,10 +29,10 @@ export class PowerService {
     const target = !actual;
     this.powers.update((powers) => ({ ...powers, [id]: target }));
     this.cameraService.setPower(id, target).subscribe({
-      next: () => this.toast.show(target ? 'Cámara encendida' : 'Cámara apagada', 'success'),
+      next: () => this.toast.show(target ? this.i18n.t('common.power.on') : this.i18n.t('common.power.off'), 'success'),
       error: () => {
         this.powers.update((powers) => ({ ...powers, [id]: actual }));
-        this.toast.show('Error al cambiar el encendido', 'error');
+        this.toast.show(this.i18n.t('common.power.error'), 'error');
       },
     });
   }

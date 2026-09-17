@@ -4,6 +4,22 @@ import { of, throwError } from 'rxjs';
 import { PowerService } from './power.service';
 import { CameraService } from './camera.service';
 import { ToastService } from '../shared/toast/toast.service';
+import { I18nService } from '../shared/i18n/i18n.service';
+import { I18N_KEYS } from '../../i18n/keys';
+
+// Stub en español: las aserciones de este spec esperan el texto en español.
+const i18nStub = {
+  lang: 'es' as const,
+  t: (key: string, params?: Record<string, string | number>) =>
+    String(I18N_KEYS[key as keyof typeof I18N_KEYS]).replace(
+      /\{\{(\w+)\}\}/g,
+      (_m, name: string) => String(params?.[name] ?? ''),
+    ),
+  translateApiError: (err: unknown) => {
+    const e = err as { error?: { error?: string }; message?: string } | null;
+    return e?.error?.error || e?.message || 'Error desconocido';
+  },
+};
 
 describe('PowerService', () => {
   let service: PowerService;
@@ -18,6 +34,7 @@ describe('PowerService', () => {
         PowerService,
         { provide: CameraService, useValue: { setPower: setPowerSpy } },
         { provide: ToastService, useValue: { show: toastShowSpy } },
+        { provide: I18nService, useValue: i18nStub },
       ],
     });
     service = TestBed.inject(PowerService);

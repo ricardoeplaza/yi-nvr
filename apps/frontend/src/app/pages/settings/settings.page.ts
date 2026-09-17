@@ -2,57 +2,59 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { PushService } from '../../services/push.service';
 import { AppHeader } from '../../shared/app-header/app-header';
+import { I18nService } from '../../shared/i18n/i18n.service';
+import { TranslatePipe } from '../../shared/i18n/translate.pipe';
 
 type PushStatus = 'inactive' | 'active' | 'error' | 'loading';
 
 @Component({
   selector: 'yi-settings-page',
   standalone: true,
-  imports: [AppHeader],
+  imports: [AppHeader, TranslatePipe],
   template: `
     <div class="settings">
-      <yi-app-header title="Ajustes" />
+      <yi-app-header [title]="'settings.title' | t" />
 
       <section class="settings-section">
-        <h2>Notificaciones</h2>
+        <h2>{{ 'settings.notifications' | t }}</h2>
         <div class="push-card">
           <div class="push-info">
-            <span class="push-title">Notificaciones push</span>
-            <span class="push-desc">Recibe alertas de movimiento en tu dispositivo</span>
+            <span class="push-title">{{ 'settings.push.title' | t }}</span>
+            <span class="push-desc">{{ 'settings.push.description' | t }}</span>
           </div>
           <div class="push-action">
             @if (pushStatus() === 'active') {
-              <span class="push-status active">Activadas</span>
-              <button class="btn btn-outline" (click)="deactivatePush()">Desactivar</button>
+              <span class="push-status active">{{ 'settings.push.statusActive' | t }}</span>
+              <button class="btn btn-outline" (click)="deactivatePush()">{{ 'settings.push.disable' | t }}</button>
             } @else if (pushStatus() === 'loading') {
-              <span class="push-status">Activando…</span>
+              <span class="push-status">{{ 'settings.push.enabling' | t }}</span>
             } @else if (pushStatus() === 'error') {
-              <span class="push-status error">Error</span>
+              <span class="push-status error">{{ 'settings.push.statusError' | t }}</span>
               @if (pushError() !== '') {
                 <span class="push-error">{{ pushError() }}</span>
               }
-              <button class="btn btn-primary" (click)="activatePush()">Reintentar</button>
+              <button class="btn btn-primary" (click)="activatePush()">{{ 'common.retry' | t }}</button>
             } @else {
-              <span class="push-status">No activadas</span>
-              <button class="btn btn-primary" (click)="activatePush()">Activar</button>
+              <span class="push-status">{{ 'settings.push.statusInactive' | t }}</span>
+              <button class="btn btn-primary" (click)="activatePush()">{{ 'settings.push.enable' | t }}</button>
             }
           </div>
         </div>
       </section>
 
       <section class="settings-section">
-        <h2>Acerca de</h2>
+        <h2>{{ 'settings.about' | t }}</h2>
         <div class="about-card">
-          <div class="about-row"><span>Aplicación</span><span>Yi NVR</span></div>
-          <div class="about-row"><span>Versión</span><span>1.0.0</span></div>
-          <div class="about-row"><span>Tecnología</span><span>Angular PWA</span></div>
+          <div class="about-row"><span>{{ 'settings.about.application' | t }}</span><span>Yi NVR</span></div>
+          <div class="about-row"><span>{{ 'settings.about.version' | t }}</span><span>1.0.0</span></div>
+          <div class="about-row"><span>{{ 'settings.about.technology' | t }}</span><span>Angular PWA</span></div>
         </div>
       </section>
 
       <section class="settings-section">
-        <h2>Sesión</h2>
+        <h2>{{ 'settings.session' | t }}</h2>
         <div class="about-card">
-          <button class="btn btn-danger full-width" (click)="logout()">Cerrar sesión</button>
+          <button class="btn btn-danger full-width" (click)="logout()">{{ 'settings.session.signOut' | t }}</button>
         </div>
       </section>
     </div>
@@ -61,6 +63,7 @@ type PushStatus = 'inactive' | 'active' | 'error' | 'loading';
 })
 export class SettingsPage implements OnInit {
   private pushService = inject(PushService);
+  private i18n = inject(I18nService);
 
   pushStatus = signal<PushStatus>('inactive');
   pushError = signal('');
@@ -89,18 +92,18 @@ export class SettingsPage implements OnInit {
         this.pushStatus.set('error');
       }
     } catch {
-      this.pushError.set('No se pudo completar la suscripción');
+      this.pushError.set(this.i18n.t('settings.push.errorSubscription'));
       this.pushStatus.set('error');
     }
   }
 
   private errorFor(reason: string): string {
     switch (reason) {
-      case 'permission-denied': return 'Permiso de notificaciones denegado';
-      case 'no-vapid-key': return 'El servidor no expone la clave VAPID';
-      case 'sw-registration': return 'No se pudo registrar el service worker';
-      case 'subscription': return 'No se pudo completar la suscripción';
-      default: return 'Error desconocido';
+      case 'permission-denied': return this.i18n.t('settings.push.errorPermission');
+      case 'no-vapid-key': return this.i18n.t('settings.push.errorNoVapidKey');
+      case 'sw-registration': return this.i18n.t('settings.push.errorServiceWorker');
+      case 'subscription': return this.i18n.t('settings.push.errorSubscription');
+      default: return this.i18n.t('common.errorUnknown');
     }
   }
 

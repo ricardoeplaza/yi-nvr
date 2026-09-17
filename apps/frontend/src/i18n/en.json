@@ -6,6 +6,7 @@
   "common.nav.sections": "Sections",
   "common.nav.home": "Home",
   "common.confirm": "Confirm",
+  "common.cancel": "Cancel",
   "common.empty.title": "No content",
   "common.selection.singular": "selected",
   "common.selection.plural": "selected",
