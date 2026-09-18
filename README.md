@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="apps/frontend/public/icons/favicon.svg" alt="Yi NVR logo" width="120" height="120">
+</p>
+
 # yi-nvr
 
 **A free, self-hosted NVR ecosystem for [yi-hack](https://github.com/roleoroleo/yi-hack-Allwinner-v2) cameras — an open alternative to the closed Xiaomi / Yi / MiHome ecosystem.**

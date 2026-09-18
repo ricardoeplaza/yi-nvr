@@ -44,9 +44,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # QEMU solo emula los builds JS (Angular + npm ci): better-sqlite3 trae
-      # binarios prebuilt glibc dentro de su paquete npm, no se compila nada
-      # dentro de Docker.
+      # QEMU emulates the arm64 build: better-sqlite3 and other native modules
+      # ship prebuilt linuxmusl binaries, avoiding compilation inside Docker.
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
@@ -68,8 +67,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=sha-,format=short
+            type=raw,value=latest
           labels: |
             org.opencontainers.image.description=Self-hosted NVR for yi-hack cameras (Express 5 API + Angular PWA)
 
@@ -85,9 +83,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Re-descarga la imagen recién publicada y la arranca con un registro de
-      # cámaras vacío (sin broker MQTT, sin cámaras): valida el boot, la init
-      # de la DB y /api/health.
       - name: Smoke test (pull + run + health)
         run: |
           echo '[]' > /tmp/cameras.json

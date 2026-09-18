@@ -1,60 +1,88 @@
+# yi-nvr — plug-and-play stack (pulls the public image from GHCR)
+#
+# Quick start (see README):
+#   cp .env.example .env                            # pin NVR_PUBLIC_IP, VAPID keys, FTP creds...
+#   cp infra/cameras.json.example infra/cameras.json
+#   cp infra/mosquitto/mosquitto.conf.example infra/mosquitto/mosquitto.conf
+#   cp infra/go2rtc/go2rtc.yaml.example infra/go2rtc/go2rtc.yaml
+#   docker compose up -d
+#
+# Data lives outside the image (volumes): ./data, ./recordings.
+# FTP staging (/app/incoming) is tmpfs by default; bind-mount alternative below.
+
 services:
   api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    image: ghcr.io/ricardoeplaza/yi-nvr:latest
+    container_name: yi-nvr
     ports:
-      - "3000:3000"
-      - "21:21"
-      - "1024-1027:1024-1027"
+      - "3000:3000"              # Single HTTP endpoint: API + PWA + media + go2rtc proxy
+      - "21:21"                  # FTP (privileged port; the container runs as root)
+      - "1024-1027:1024-1027"    # FTP passive range (must match FTP_PASSIVE_RANGE)
     volumes:
       - ./data:/app/data
-      - ./incoming:/app/incoming
+      # FTP staging in RAM (fast; wiped when the container stops).
+      # Alternative if you prefer it on disk:
+      #   - ./incoming:/app/incoming
+      - type: tmpfs
+        target: /app/incoming
+        tmpfs:
+          size: 64m
       - ./recordings:/app/recordings
       - ./infra/cameras.json:/app/infra/cameras.json
-      # Backup 3-2-1 (opcional): mapear el mountpoint remoto del host (NFS o
-      # rclone) sobre el directorio fijo /app/remote_recordings. Ejemplo:
+      # 3-2-1 backup (optional): map your NFS/rclone mountpoint + REMOTE_MIRROR=1
       #   - /srv/nvr/remote_recordings:/app/remote_recordings
-      #     + REMOTE_MIRROR=1 en .env
-      # Staging rápido (opcional, alternativa al bind de ./incoming): tmpfs/ramdisk
-      #   - type: tmpfs
-      #     target: /app/incoming
-      #     size: 512m
+    # Fail fast if NVR_PUBLIC_IP is not pinned in .env: without it the app
+    # auto-detects the container's bridge IP (172.x), which cameras on the LAN
+    # cannot reach → FTP/MQTT would be silently dead.
+    command: >-
+      sh -c 'test -n "$NVR_PUBLIC_IP" || { echo "ERROR: NVR_PUBLIC_IP is not set in .env. Pin the LAN IP of the Docker host (the one your cameras can reach), then restart." >&2; exit 1; } && exec node src/server.js'
     environment:
-      - DATA_DIR=/app/data
-      - INCOMING_DIR=/app/incoming
-      - RECORDINGS_DIR=/app/recordings
-      - REMOTE_RECORDINGS_DIR=/app/remote_recordings
+      # Data dirs (defaults = image values; override via .env if needed)
+      - DATA_DIR=${DATA_DIR:-/app/data}
+      - INCOMING_DIR=${INCOMING_DIR:-/app/incoming}
+      - RECORDINGS_DIR=${RECORDINGS_DIR:-/app/recordings}
+      - REMOTE_RECORDINGS_DIR=${REMOTE_RECORDINGS_DIR:-/app/remote_recordings}
       - REMOTE_MIRROR=${REMOTE_MIRROR:-}
+      # Camera registry (mounted above; REQUIRED)
       - CAMERAS_JSON_PATH=/app/infra/cameras.json
+      # MQTT: broker from this same compose file
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      # FTP: passive range must match the published ports
       - FTP_PASSIVE_RANGE=1024-1027
+      - FTP_USER=${FTP_USER:-camera}
+      - FTP_PASS=${FTP_PASS:-surveillance123}
+      # REQUIRED — LAN IP of the Docker host, as seen by the cameras (FTP + MQTT).
+      # The container cannot know it: auto-detection would return the bridge IP.
+      - NVR_PUBLIC_IP=${NVR_PUBLIC_IP}
+      # Web push (optional; empty = noop mode, sends nothing and never fails)
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_CONTACT_EMAIL=${VAPID_CONTACT_EMAIL}
+      # Video processing (ffmpeg): 1 process / 2 threads = safe for SBCs
       - FFMPEG_CONCURRENCY=${FFMPEG_CONCURRENCY:-1}
       - FFMPEG_THREADS=${FFMPEG_THREADS:-2}
       - PREVIEW_SECONDS=${PREVIEW_SECONDS:-4}
       - PREVIEW_FPS=${PREVIEW_FPS:-6}
-      - MQTT_BROKER_URL=mqtt://mosquitto:1883
-      - GO2RTC_URL=http://${NVR_PUBLIC_IP}:1984
-      - NVR_PUBLIC_IP=${NVR_PUBLIC_IP}
-      - FTP_USER=${FTP_USER:-camera}
-      - FTP_PASS=${FTP_PASS:-surveillance123}
-      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
-      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
-      - VAPID_CONTACT_EMAIL=${VAPID_CONTACT_EMAIL}
-      - API_AUTH_TOKEN=${API_AUTH_TOKEN}
+      # Clip retention
       - RETENTION_DAYS=${RETENTION_DAYS:-30}
       - STORAGE_MAX_GB=${STORAGE_MAX_GB:-10}
     depends_on: [mosquitto, go2rtc]
     restart: unless-stopped
+
   mosquitto:
     image: eclipse-mosquitto:2
+    container_name: yi-mosquitto
     ports:
-      - "1883:1883"
+      - "1883:1883"              # Cameras (yi-hack) connect from the LAN
     volumes:
       - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
     restart: unless-stopped
+
   go2rtc:
     image: alexxit/go2rtc:latest
-    network_mode: host
+    container_name: yi-go2rtc
+    # On the compose network: the API reaches it by name (default
+    # GO2RTC_URL=http://go2rtc:1984) and exposes it to browsers via /stream-proxy.
     volumes:
       - ./infra/go2rtc:/config
     entrypoint:

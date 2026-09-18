@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="apps/frontend/public/icons/favicon.svg" alt="Yi NVR logo" width="120" height="120">
+</p>
+
 # yi-nvr
 
 **Un ecosistema NVR gratuito y autoalojado para cámaras [yi-hack](https://github.com/roleoroleo/yi-hack-Allwinner-v2): la alternativa libre al ecosistema cerrado de Xiaomi / Yi / MiHome.**
