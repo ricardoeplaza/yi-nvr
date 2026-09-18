@@ -26,8 +26,8 @@ const MESSAGES: Partial<Record<Locale, Record<string, string>>> = {
  * Minimal i18n: the locale is detected once at bootstrap from the browser
  * locale and lives in memory (no switching, no persistence).
  *
- * English is the universal default: an unsupported browser locale resolves to
- * 'en'. Spanish (es.json) is the source language and the guaranteed last
+ * English is the default language end to end: an unsupported browser locale
+ * resolves to 'en' at detection time, and English is also the guaranteed last
  * fallback inside t(), so output is never broken.
  */
 @Injectable({ providedIn: 'root' })
@@ -45,12 +45,12 @@ export class I18nService {
   /**
    * Translates a key, substituting {{param}} placeholders.
    * Uses the detected locale's template when present and non-empty, otherwise
-   * falls back to Spanish (es.json — source language, always complete).
+   * falls back to English (en.json — default language, always complete).
    */
   t(key: I18nKey, params?: Record<string, string | number>): string {
     let template = MESSAGES[this.lang]?.[key];
     if (typeof template !== 'string' || template.length === 0) {
-      template = MESSAGES.es?.[key] ?? '';
+      template = MESSAGES.en?.[key] ?? '';
     }
     return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(params?.[name] ?? ''));
   }
