@@ -1,5 +1,6 @@
-# VCS (no hace falta en la imagen)
+# VCS & CI (no hace falta en la imagen)
 .git
+.github
 
 # Dependencias: se reconstruyen con `npm ci` DENTRO de la imagen.
 # NUNCA copiar el node_modules de la máquina de dev: better-sqlite3 es nativo
@@ -12,6 +13,7 @@ apps/frontend/node_modules
 dist
 .angular
 apps/frontend/dist
+coverage
 # Build de Angular copiado a mano en dev (lo genera el stage frontend-build)
 apps/api/src/public
 
@@ -31,3 +33,11 @@ apps/api/src/storage
 # Secrets / entorno (en Docker los env los pasa docker-compose)
 .env
 .env.*
+
+# Docs / infra / tooling (no necesarios para la imagen; cameras.json se monta
+# en runtime vía docker-compose, igual que la config de mosquitto/go2rtc)
+docs
+infra
+README.md
+README.es.md
+docker-compose.yml

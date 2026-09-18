@@ -1,57 +1,104 @@
-name: Build and Publish Docker Image
+name: Docker
 
 on:
   push:
     branches: [ "master" ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push:
+  quality:
+    name: Frontend tests (vitest)
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      packages: write
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    # Emulación arm64 para el build multi-plataforma
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: apps/frontend
 
-    - name: Log in to the Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - run: npm test
+        working-directory: apps/frontend
 
-    - name: Extract Docker metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=raw,value=latest,enable={{is_default_branch}}
-          type=sha,prefix=sha-,format=short
+  docker:
+    name: Build & push image (amd64 + arm64)
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v6
-      with:
-        context: .
-        file: apps/api/Dockerfile
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      # QEMU solo emula los builds JS (Angular + npm ci): better-sqlite3 trae
+      # binarios prebuilt glibc dentro de su paquete npm, no se compila nada
+      # dentro de Docker.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64,arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+          labels: |
+            org.opencontainers.image.description=Self-hosted NVR for yi-hack cameras (Express 5 API + Angular PWA)
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Re-descarga la imagen recién publicada y la arranca con un registro de
+      # cámaras vacío (sin broker MQTT, sin cámaras): valida el boot, la init
+      # de la DB y /api/health.
+      - name: Smoke test (pull + run + health)
+        run: |
+          echo '[]' > /tmp/cameras.json
+          docker run -d --name smoke \
+            -p 3000:3000 \
+            -v /tmp/cameras.json:/app/infra/cameras.json:ro \
+            -e CAMERAS_JSON_PATH=/app/infra/cameras.json \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health; then echo " -> healthy"; exit 0; fi
+            sleep 2
+          done
+          docker logs smoke || true
+          exit 1
