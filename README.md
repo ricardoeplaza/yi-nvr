@@ -1,179 +1,208 @@
 # yi-nvr
 
-> A 100% free, self-hosted NVR ecosystem that replaces the closed Xiaomi/Yi (MiHome) world for cameras running [yi-hack](https://github.com/roleoroleo/yi-hack-Allwinner-v2) firmware.
+**A free, self-hosted NVR ecosystem for [yi-hack](https://github.com/roleoroleo/yi-hack-Allwinner-v2) cameras — an open alternative to the closed Xiaomi / Yi / MiHome ecosystem.**
 
-**This project is being live-coded by an AI.** The entire codebase is written in real time by [Qwen 3.8 27B](https://qwen.ai), running **locally on a 16 GB VRAM machine** — no cloud APIs, no proprietary models. That is the point: this is a public, verifiable proof that serious software development is possible with local, open-weight models.
+Take full control of your surveillance setup: manage multiple cameras, record motion-triggered clips, view live streams directly in your browser, and receive instant push notifications. No accounts, no cloud lock-in, and no subscriptions. Just your cameras, your storage, and your rules.
 
-That said, this is *not* "prompt and pray". Behind every commit there is:
+> **Up and running in seconds:** clone the repository, copy `.env`, and run `npm start` inside `apps/api`. Your system will be ready at **http://localhost:3000** in about a minute.
 
-- a long, deliberate **human planning phase** captured in [`AGENT-PLAN.md`](AGENT-PLAN.md) — the single source of truth that defines the mission, the stack, the nine execution phases and their acceptance criteria, and
-- **constant human supervision, commit by commit**, reviewing, correcting and approving each step.
+---
 
-## Why this project exists
+## Quick Start
 
-Two motivations, one codebase:
+The entire system runs as a single Node.js process on a single port — no separate web server or nginx required.
 
-1. **Freedom.** Xiaomi's recent policy changes turned the official ecosystem (MiHome app) into a subscription-gated experience: core surveillance features are no longer fully usable without paying. Combined with the deprecation of the original yi-hack, that pushed this project to build a complete, **libre alternative** that gives back full control of your own cameras — no accounts, no cloud lock-in, no subscription.
-2. **Proof.** Demonstrating that an autonomous AI agent, powered by a locally-run 27B model with 16 GB of VRAM, can take a working proof-of-concept all the way to a production-grade application under human supervision.
+> **Build the frontend first:** The dashboard shares the API port (`3000`), but requires the Angular PWA to be built at least once; otherwise, `http://localhost:3000` will return a 404 error. Make sure to run `npm run build:web` inside `apps/frontend` before starting the backend:
 
-The result is a single project that covers the whole job the Xiaomi ecosystem used to do:
+```bash
+# 1. Build the Angular PWA once (served by the API as static files)
+cd apps/frontend && npm install && npm run build:web
 
-- **Camera management** — state, events, live stream and configuration for N cameras, all over MQTT.
-- **Recording** — a self-hosted "cloud recorder": cameras push motion-triggered clips over FTP; they are processed (thumbnails + animated previews), indexed in SQLite and served over a REST API and a PWA.
-- **Notifications** — Web Push alerts in real time, so you always know what is happening.
+# 2. Copy the environment template (first time only)
+cp .env.example .env
 
-## Features
+# 3. Start the backend — REST API + static PWA on http://localhost:3000
+cd apps/api && npm install && npm start
 
-- **FTP clip receiver** — motion-triggered `.mp4` uploads from yi-hack cameras, mapped to cameras via a configurable registry.
-- **Video processing** — per-clip JPG thumbnail + animated WebP preview with `ffmpeg`.
-- **MQTT control plane** — motion events in; LED, night vision (IR-cut), record mode and power commands out.
-- **Live view** — WebRTC in the browser via a `go2rtc` sidecar (MSE/mp4 fallback), proxied through the same process. No plugins.
-- **Web Push notifications** — on motion and on clip processing completion.
-- **Mobile-first PWA** — dashboard, camera controls, clip gallery, timeline, settings.
-- **Internationalization** — English (default), Spanish, French, German, Portuguese and Italian, auto-detected from the browser language at startup; no persistence, no in-app switching.
-- **Retention & bounded disk** — age-based and capacity-based cleanup policies.
-- **Single HTTP entry point** — API + PWA + media + stream proxy on one port. No nginx, no extra web server.
-- **Lightweight** — designed to run on small ARM SBCs (Orange Pi and friends), behind a Tailscale/Headscale VPN.
+```
 
-## Tech stack
+Open **http://localhost:3000** to access the dashboard.
+
+The two local execution modes — **production** (single build served by the API) versus **development** (`ng serve` proxied to the API) — are detailed in the technical READMEs below.
+
+### Camera Configuration
+
+`infra/cameras.json` serves as the single source of truth for the backend (LAN IPs, FTP directory, MQTT topics). It is **gitignored**, so be sure to enter your real camera details before connecting them.
+
+---
+
+## Key Features
+
+* **Camera Management** — Monitor status, view events, stream live video, and configure camera settings via MQTT.
+* **Motion-Triggered Recording** — Cameras upload short `.mp4` clips over FTP. Each clip generates a JPG thumbnail and an animated WebP preview, gets indexed in SQLite, and is served via the API and PWA.
+* **In-Browser Live View** — Low-latency WebRTC streaming powered by a `go2rtc` sidecar (with fallback to MSE/mp4), proxied through the main process. No plugins required.
+* **Web Push Notifications** — Receive real-time alerts for motion events and clip processing completion straight to your browser.
+* **Mobile-First PWA** — Dashboard, camera controls, clip gallery, timeline, and settings bundled into a single installable app.
+* **Storage & Disk Management** — Automated retention policies based on age and storage capacity keep disk usage fully predictable.
+* **Lightweight & Flexible** — Optimized to run efficiently on low-power single-board computers (such as Orange Pi) behind a Tailscale/Headscale VPN.
+
+---
+
+## Architecture & Data Flow
+
+Data moves through a simple, linear pipeline:
+
+```
+Camera ──FTP clips──▶ FTP receiver ──▶ ffmpeg processing
+                                              │
+                                        thumbnail + preview
+                                              │
+                                        SQLite index
+                                              │
+REST API ◀───────────────────────────────────┘
+   ▲
+   │ MQTT (motion, LED, IR-cut, record mode, power)
+Camera ◀─────────────────────────────── control plane
+   ▲
+   │ WebRTC / MSE (live view)
+Browser ◀──────────────────────────────────────── go2rtc sidecar
+
+```
+
+1. The **camera** detects motion and uploads a short clip via FTP.
+2. The **FTP receiver** captures the raw file, and `ffmpeg` generates a thumbnail along with an animated preview.
+3. The processed metadata is indexed in SQLite and exposed through the **REST API**.
+4. The **Angular PWA** fetches this data to display cameras, galleries, and timelines.
+5. **MQTT** manages motion events and control commands (LED, night vision, recording mode, power) between the NVR and each camera.
+6. **Web Push** delivers instant notifications to your browser.
+
+For complete architectural details — technology choices, environment variables, and design trade-offs — check out [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+---
+
+## Tech Stack
 
 | Layer | Technology |
-|---|---|
-| Backend | Node.js 26, Express 5 |
+| --- | --- |
+| Backend | Node.js (LTS 20+), Express 5 |
 | Database | SQLite via `better-sqlite3` |
-| FTP | `ftp-srv` + `chokidar` |
-| Video processing | `fluent-ffmpeg` + system `ffmpeg` |
-| MQTT broker | Eclipse Mosquitto 2 (Docker) |
+| FTP Receiver | `ftp-srv` + `chokidar` |
+| Video Processing | `fluent-ffmpeg` + system `ffmpeg` binary |
+| MQTT Control Plane | Eclipse Mosquitto 2 (Docker) |
 | RTSP → WebRTC | `go2rtc` sidecar, proxied in-process |
-| Push | `web-push` (VAPID) |
-| Frontend | Angular PWA |
-| Packaging | Docker Compose (systemd as plan B for low-RAM SBCs) |
+| Push Notifications | `web-push` (VAPID) |
+| Frontend | Angular 22 PWA (with service worker) |
+| Deployment | Docker Compose (with systemd support for low-RAM devices) |
 
-## Project structure
+---
 
-```
-yi-nvr/
-├── AGENT-PLAN.md            # execution plan: phases, criteria, decisions
-├── .env.example
-├── docker-compose.yml
-├── infra/
-│   ├── cameras.json         # camera registry (bind-mounted, gitignored)
-│   ├── mosquitto/           # broker config
-│   └── go2rtc/              # stream config (manual; .example template)
-├── apps/
-│   ├── api/                 # Node.js backend (FTP, MQTT, push, REST, PWA hosting)
-│   │   └── src/
-│   │       ├── server.js    # bootstrap only
-│   │       ├── ftp.js       # FTP receiver
-│   │       ├── processor.js # thumbnail/preview pipeline
-│   │       ├── database.js  # SQLite (WAL)
-│   │       ├── mqtt/        # client, topics, commands
-│   │       ├── push/        # Web Push fan-out
-│   │       └── routes/      # videos, cameras, timeline, push, stream
-│   └── frontend/            # Angular PWA
-├── data/                    # DB + processed (dev + Docker volume; SSD recommended)
-├── incoming/                # FTP staging: raw camera uploads (dev + Docker volume)
-├── recordings/              # local copy of processed clips (dev + Docker volume; HDD recommended)
-└── docs/
-    ├── ARCHITECTURE.md      # stack, environments, decision log
-    └── API.md               # full API reference
-```
+## Deployment
 
-## Getting started
-
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) (LTS, 20+)
-- [FFmpeg](https://ffmpeg.org/) on the system PATH
-- An MQTT broker (Mosquitto) for camera control
-- Cameras flashed with [yi-hack-Allwinner-v2](https://github.com/roleoroleo/yi-hack-Allwinner-v2)
-
-### Development
+For production environments, running via Docker Compose is recommended. **You do not need to clone the full repository** — simply download `docker-compose.yml` and the `.example` config files, customize them, and start the stack:
 
 ```bash
-cp .env.example .env
-cp infra/cameras.json.example infra/cameras.json   # then edit: your cameras
-cd apps/api
-npm install
-npm start
-```
+# 1. Fetch docker-compose.yml
+curl -o docker-compose.yml https://raw.githubusercontent.com/ricardoeplaza/yi-nvr/master/docker-compose.yml
 
-The server listens on `http://localhost:3000` (HTTP API + static assets) and `21` (FTP, passive range `1024–1027`). Port `21` is the one the camera hardcodes in `ftppush.sh` (D25); it is a privileged port, so run the API as admin/root (or set `FTP_PORT` to an alternative port and patch `ftppush.sh` on the camera SD — see `docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md` §5.2.1).
+# 2. Fetch configuration templates
+curl -o .env.example      https://raw.githubusercontent.com/ricardoeplaza/yi-nvr/master/.env.example
+curl -o infra/cameras.json.example   https://raw.githubusercontent.com/ricardoeplaza/yi-nvr/master/infra/cameras.json.example
+curl -o infra/go2rtc/go2rtc.yaml.example https://raw.githubusercontent.com/ricardoeplaza/yi-nvr/master/infra/go2rtc/go2rtc.yaml.example
+curl -o infra/mosquitto/mosquitto.conf.example https://raw.githubusercontent.com/ricardoeplaza/yi-nvr/master/infra/mosquitto/mosquitto.conf.example
 
-### Camera config (first run)
-
-```bash
-cp infra/cameras.json.example infra/cameras.json
-```
-
-- `infra/cameras.json` is the single source of truth for the backend (LAN IPs, FTP dir, MQTT prefix/topics). It is **gitignored** — fill in your real values.
-- `infra/go2rtc/go2rtc.yaml` is **manual** (template: `infra/go2rtc/go2rtc.yaml.example` — copy it and fill in real values). It is **gitignored** and the API never writes to it. One stream per camera `id` from `cameras.json`; use the `ffmpeg:` prefix to normalize a source (e.g. H.265 → H.264). For Tuya/Smart Life cameras, put the full `tuya://` URL (device id, email, password) as a stream source.
-
-### Deploy
-
-```bash
-# 1. Configure
-cp .env.example .env
-# Edit .env → set NVR_PUBLIC_IP, VAPID keys, API_AUTH_TOKEN
-
-cp infra/cameras.json.example infra/cameras.json
-# Edit → add your cameras (id, host, ftp_dir, mqtt_prefix)
-
-cp infra/go2rtc/go2rtc.yaml.example infra/go2rtc/go2rtc.yaml
-# Edit → add one RTSP stream per camera
-
+# 3. Configure (edit the generated files with your settings)
+cp .env.example .env          # Set NVR_PUBLIC_IP, VAPID keys, API_AUTH_TOKEN
+cp infra/cameras.json.example infra/cameras.json   # Add your camera details
+cp infra/go2rtc/go2rtc.yaml.example infra/go2rtc/go2rtc.yaml   # Define RTSP streams
 cp infra/mosquitto/mosquitto.conf.example infra/mosquitto/mosquitto.conf
-# Edit if needed (listeners, auth)
 
-# 2. Run (pulls the latest image from GHCR)
+# 4. Start the stack (pulls latest images; launches API, Mosquitto, and go2rtc)
 docker compose up -d
+
 ```
 
-**`NVR_PUBLIC_IP`** must be the LAN IP of the machine running the stack (e.g. `192.168.1.100`). Cameras use it for FTP upload; the browser uses it for WebRTC media.
+> The `.example` templates reside in `infra/`, `infra/go2rtc/`, and `infra/mosquitto/`. If you encounter issues fetching individual files, fall back to cloning the repository once: `git clone https://github.com/ricardoeplaza/yi-nvr.git && cd yi-nvr`.
 
-**Exposed ports**: `3000` (HTTP/API), `21` + `1024-1027` (FTP), `1883` (Mosquitto — cameras connect from LAN). `go2rtc` listens directly on `1984` (WHEP) and `8555/udp` (WebRTC media).
+**Exposed Ports**
 
-#### Storage
+| Port(s) | Purpose |
+| --- | --- |
+| `3000` | HTTP API + static PWA + media server + stream proxy |
+| `21` + `1024–1027` | FTP service (camera uploads; passive port range) |
+| `1883` | Mosquitto MQTT broker (local camera connections) |
 
-| Directory | Purpose | Recommended |
-|-----------|---------|-------------|
-| `./data/` | SQLite DB + processed media (thumbnails, previews) | SSD |
-| `./incoming/` | FTP staging: raw camera uploads (one subdir per `ftp_dir`); the only dir the watcher monitors | tmpfs / HDD |
-| `./recordings/` | Local copy of renamed/processed clips (served at `/videos`) | HDD |
+> Port `21` is a privileged port, so the container runs as root by default. If you prefer to avoid privileged ports, change `FTP_PORT` in `.env` and update `ftppush.sh` on the camera's SD card.
 
-In development (`npm start`) the app uses the same `./data/`, `./incoming/` and `./recordings/` directories at the repo root (created automatically, gitignored) — data always lives outside the source tree, in both dev and Docker.
+**Storage Structure** — Data remains outside the source tree in both local development and Docker setups:
 
-**Remote mirror (3-2-1 backup)**: optionally, every processed clip is also *copied* to `REMOTE_RECORDINGS_DIR` when `REMOTE_MIRROR=1`. That is a **fixed** dir inside the container (`/app/remote_recordings` in Docker, `<repo>/remote_recordings` in dev) — you map your host's NFS or rclone mountpoint onto it via a `docker-compose.yml` volume (e.g. `/srv/nvr/remote_recordings:/app/remote_recordings`; setup notes in `.env.example`). The app does plain filesystem I/O against it (no provider logic); mirror failures are logged with retries and never break the local pipeline.
+| Directory | Purpose | Recommended Storage |
+| --- | --- | --- |
+| `./data/` | SQLite database + processed assets (thumbnails, previews) | SSD |
+| `./incoming/` | FTP staging area: raw camera uploads (monitored by watcher) | tmpfs / HDD |
+| `./recordings/` | Local copy of processed clips (served at `/videos`) | HDD |
 
-## API (summary)
+**Optional 3-2-1 Backup Strategy:** Set `REMOTE_MIRROR=1` and mount a remote storage target (NFS or rclone) to the `./remote_recordings/` directory. Each processed clip will be mirrored automatically. Remote sync failures are logged and retried without disrupting local operations.
+
+---
+
+## Developer API
+
+The backend exposes a RESTful API on the same port as the web interface (`http://localhost:3000`). Key endpoints include:
 
 | Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/api/videos` | List clips (filters: `camera`, `startDate`, `endDate`, `limit`) |
-| `GET` | `/api/videos/:id` | Clip details |
-| `DELETE` | `/api/videos/:id` | Delete clip + files |
-| `GET` | `/api/cameras` | Registered cameras + DB facts |
-| `POST` | `/api/cameras/:id/reload` | Hot-reload camera registry |
-| `POST` | `/api/cameras/:id/led` | Toggle LED |
-| `POST` | `/api/cameras/:id/night-vision` | Toggle IR-cut |
-| `POST` | `/api/cameras/:id/rec-mode` | `continuous` \| `motion` \| `off` |
-| `POST` | `/api/cameras/:id/power` | Power on/off |
-| `GET` | `/api/cameras/:id/stream` | WebRTC/MSE stream endpoints |
-| `GET` | `/api/timeline` | Recordings grouped by date |
-| `GET` | `/api/health` | Liveness |
-| `POST` | `/api/push/subscribe` | Register a Web Push subscription |
+| --- | --- | --- |
+| `GET` | `/api/health` | Service health status (DB, FTP, MQTT) |
+| `GET` | `/api/videos` | Query video clips (filters: `camera`, `startDate`, `endDate`, `q`, `favorite`, `limit`) |
+| `GET` | `/api/videos/:id` | Fetch clip metadata |
+| `PATCH` | `/api/videos/:id` | Update clip title |
+| `POST` | `/api/videos/:id/favorite` | Toggle clip favorite status |
+| `DELETE` | `/api/videos/:id` | Delete clip and associated files |
+| `GET` | `/api/cameras` | List registered cameras and stats |
+| `POST` | `/api/cameras/:id/reload` | Hot-reload camera registry configuration |
+| `POST` | `/api/cameras/:id/{power,led,night-vision,rec-mode}` | Send control commands to camera |
+| `GET` | `/api/cameras/:id/stream` | Get WebRTC/MSE streaming endpoints |
+| `POST` | `/api/push/subscribe` | Register Web Push subscriptions |
 
-See [`docs/API.md`](docs/API.md) for the full reference once phase 8 lands.
+The core implementation is located in [`apps/api/src/server.js`](apps/api/src/server.js) and router modules under `apps/api/src/routes/`.
 
-## Status
+---
 
-The project is evolving phase by phase following [`AGENT-PLAN.md`](AGENT-PLAN.md) (phase 0 → 9), each phase gated by verifiable acceptance criteria and tagged in git. The current tag tells you exactly how far it has come.
+## Documentation Links
 
-## Thanks
+* **Frontend (Angular PWA)** — [`apps/frontend/README.md`](apps/frontend/README.md)
+* **Backend Architecture** — [`apps/api/src/server.js`](apps/api/src/server.js) and `apps/api/src/routes/`
+* **Design & System Architecture** — [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+* **Camera CGI Command Reference** — [`docs/CAMERA-CGI-REFERENCE.md`](docs/CAMERA-CGI-REFERENCE.md)
+* **Firmware SD Card Configuration** — [`docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md`](docs/SD-FIRMWARE-OFFICIAL-SETTINGS.md)
 
-- **[roleoro](https://github.com/roleoroleo)** — for [yi-hack-Allwinner-v2](https://github.com/roleoroleo/yi-hack-Allwinner-v2), the open firmware that exposes MQTT, RTSP and FTP on these cameras and makes this whole project possible. Without it, there is no escape from the closed ecosystem.
-- The open-source community behind `go2rtc`, `Mosquitto`, `better-sqlite3` and the rest of the stack.
+---
+
+## Project Status
+
+The project is developed iteratively in phases, each verified against strict acceptance criteria and tagged in git. Check the current git tag to see the latest progress. The development roadmap is available in [`AGENT-PLAN.md`](AGENT-PLAN.md).
+
+---
+
+## Acknowledgments
+
+* **[roleoroleo](https://github.com/roleoroleo?utm_source=gemini)** — Creator of [yi-hack-Allwinner-v2](https://github.com/roleoroleo/yi-hack-Allwinner-v2?utm_source=gemini), the custom firmware enabling MQTT, RTSP, and FTP support on these cameras. This project would not exist without his work.
+* The open-source communities behind `go2rtc`, `Mosquitto`, `better-sqlite3`, `ffmpeg`, and the surrounding ecosystem.
+
+---
 
 ## License
 
-[ISC](https://opensource.org/licenses/ISC) — free to use, modify and redistribute.
+[ISC License](https://opensource.org/licenses/ISC?utm_source=gemini) — Free to use, modify, and distribute.
+
+---
+
+## Built Entirely with Local Open Models
+
+This codebase was developed using **Qwen 27B**, an open-weight model running **100% locally on a single 16 GB GPU** without relying on cloud APIs or proprietary services. This approach demonstrates that full-featured, production-ready software can be engineered using open weights on accessible hardware.
+
+The project followed a disciplined human-in-the-loop workflow:
+
+* A comprehensive **human planning phase** recorded in [`AGENT-PLAN.md`](AGENT-PLAN.md), outlining the architecture, tech stack, execution roadmap, and acceptance benchmarks.
+* Continuous **human oversight and commit-by-commit review**, validating and approving every line of code.
+
+The result is a reliable, self-hosted system that replaces proprietary cloud ecosystems using consumer-grade hardware.
